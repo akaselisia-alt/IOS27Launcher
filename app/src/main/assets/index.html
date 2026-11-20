@@ -7,21 +7,25 @@
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
   html, body { margin: 0; height: 100%; background: transparent; font-family: -apple-system, system-ui, Roboto, sans-serif; color: #fff; overflow: hidden; }
-  body { display: flex; flex-direction: column; background: linear-gradient(180deg, rgba(0,0,0,.28), rgba(0,0,0,.42)); }
+  body { display: flex; flex-direction: column; }
+  #wall { position: fixed; inset: 0; z-index: 0; background-size: cover; background-position: center; }
+  #clock, #pages, #dots, #dock { position: relative; z-index: 1; }
 
-  #clock { text-align: center; padding: 14px 0 2px; text-shadow: 0 1px 6px rgba(0,0,0,.45); flex: none; }
+  #clock { text-align: center; padding: 14px 0 2px; text-shadow: 0 1px 8px rgba(0,0,0,.4); flex: none; }
   #time { font-size: 52px; font-weight: 300; letter-spacing: -2px; line-height: 1.05; }
-  #date { font-size: 14px; opacity: .9; }
+  #date { font-size: 14px; opacity: .92; }
 
   #pages { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; }
   #pages::-webkit-scrollbar { display: none; }
-  .page { flex: 0 0 100%; scroll-snap-align: start; display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: var(--cell); padding: 10px 6px 0; align-content: start; }
+  .page { flex: 0 0 100%; scroll-snap-align: start; display: grid; grid-template-columns: repeat(var(--cols), 1fr); grid-auto-rows: var(--cell); padding: 10px 6px 0; align-content: start; }
 
-  .app { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 5px; min-width: 0; }
-  .ico { width: var(--ico); height: var(--ico); border-radius: 22%; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; overflow: hidden; }
-  .ico img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .app { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+  .ico { width: var(--ico); height: var(--ico); border-radius: var(--rad); background: rgba(255,255,255,.16); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+  .ico img, .ico svg { width: 100%; height: 100%; object-fit: contain; display: block; }
   .app:active .ico { transform: scale(.9); opacity: .85; }
   .lbl { font-size: 10.5px; max-width: 100%; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+  body.nolabels .lbl { display: none; }
+  body.nolabels { --cellextra: 0px; }
 
   #dots { display: flex; justify-content: center; gap: 6px; padding: 4px 0; flex: none; min-height: 14px; }
   #dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.4); }
@@ -29,45 +33,109 @@
   #dock { display: flex; justify-content: space-around; align-items: center; margin: 2px 10px 6px; padding: 10px 6px; border-radius: 26px; background: rgba(255,255,255,.2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); flex: none; }
   #dock .lbl { display: none; }
 
-  /* Pull-down gesture strip */
   #grab { position: fixed; left: 0; right: 0; top: 0; height: 46px; z-index: 5; }
+  #msg { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 30; background: rgba(30,30,36,.92); padding: 10px 16px; border-radius: 16px; font-size: 13px; display: none; max-width: 85%; text-align: center; }
+
+  /* Overlays */
+  .sheet { position: fixed; inset: 0; z-index: 10; display: none; background: rgba(18,18,26,.72); backdrop-filter: blur(26px); -webkit-backdrop-filter: blur(26px); overflow-y: auto; padding: 16px 16px 40px; }
+  .sheet.show { display: block; animation: drop .2s ease-out; }
+  @keyframes drop { from { transform: translateY(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .sheet h2 { margin: 4px 0 14px; font-size: 17px; font-weight: 600; text-align: center; }
+  .done { position: absolute; right: 16px; top: 16px; font-size: 14px; color: #7cc4ff; padding: 6px; }
+  .agrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px 4px; }
 
   /* Control Center */
-  #cc { position: fixed; inset: 0; z-index: 10; display: none; background: rgba(0,0,0,.45); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); padding: 18px 16px; overflow-y: auto; }
-  #cc.show { display: block; animation: drop .22s ease-out; }
-  @keyframes drop { from { transform: translateY(-30px); opacity: 0; } to { transform: none; opacity: 1; } }
-  #cc h2 { margin: 4px 0 14px; font-size: 15px; font-weight: 600; opacity: .85; text-align: center; }
-  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  .tile { aspect-ratio: 1; border-radius: 22px; background: rgba(255,255,255,.18); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 11px; }
-  .tile svg { width: 26px; height: 26px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #cc { background: rgba(0,0,0,.5); }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tile { aspect-ratio: 1; border-radius: 20px; background: rgba(255,255,255,.17); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font-size: 10.5px; text-align: center; padding: 4px; }
+  .tile svg { width: 25px; height: 25px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .tile.on { background: #fff; color: #111; }
   .tile.on svg { stroke: #111; }
-  .tile:active { transform: scale(.95); }
-  .wide { grid-column: span 4; border-radius: 22px; background: rgba(255,255,255,.18); padding: 14px 16px; display: flex; align-items: center; gap: 12px; font-size: 12px; }
-  .wide input { flex: 1; accent-color: #fff; }
-  #ccClose { text-align: center; opacity: .7; font-size: 12px; margin-top: 18px; padding: 10px; }
+  .tile:active { transform: scale(.94); }
+  .wide { grid-column: span 4; border-radius: 20px; background: rgba(255,255,255,.17); padding: 13px 16px; display: flex; align-items: center; gap: 12px; font-size: 12px; }
+  .wide input[type=range] { flex: 1; accent-color: #fff; }
+  .wide.btns { justify-content: space-around; font-size: 22px; }
+  .wide.btns span { padding: 4px 14px; }
+  .banner { grid-column: span 4; border-radius: 20px; background: rgba(255,170,60,.22); border: 1px solid rgba(255,190,100,.5); padding: 12px 14px; font-size: 12px; line-height: 1.35; display: none; }
+  .banner b { display: block; margin-bottom: 4px; font-size: 13px; }
+  .banner button { margin-top: 8px; }
+  button.pill { background: #fff; color: #111; border: 0; border-radius: 14px; padding: 8px 14px; font-size: 12px; font-weight: 600; }
+  #ccClose { text-align: center; opacity: .7; font-size: 12px; margin-top: 16px; padding: 10px; }
+
+  /* Customize */
+  .sec { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; opacity: .65; margin: 18px 6px 8px; }
+  .card { background: rgba(255,255,255,.12); border-radius: 18px; overflow: hidden; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .row:last-child { border-bottom: 0; }
+  .row input[type=range] { width: 52%; accent-color: #7cc4ff; }
+  .seg { display: flex; background: rgba(255,255,255,.14); border-radius: 10px; padding: 2px; }
+  .seg span { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+  .seg span.on { background: #fff; color: #111; }
+  .sw { width: 46px; height: 28px; border-radius: 14px; background: rgba(255,255,255,.25); position: relative; flex: none; }
+  .sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .sw.on { background: #34c759; }
+  .sw.on::after { left: 20px; }
+  .walls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 12px; }
+  .wl { aspect-ratio: 9/14; border-radius: 14px; background-size: cover; background-position: center; border: 2px solid transparent; display: flex; align-items: flex-end; justify-content: center; font-size: 11px; padding-bottom: 6px; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  .wl.on { border-color: #fff; }
+  .wl.sys { background: linear-gradient(135deg, #444, #888); }
+  .wl.pick { background: rgba(255,255,255,.14); align-items: center; padding: 0; font-size: 13px; }
+  .small { font-size: 11px; opacity: .6; padding: 0 14px 12px; }
 </style>
 </head>
 <body>
+  <div id="wall"></div>
   <div id="grab"></div>
   <div id="clock"><div id="time"></div><div id="date"></div></div>
   <div id="pages"></div>
   <div id="dots"></div>
   <div id="dock"></div>
+  <div id="msg"></div>
 
-  <div id="cc">
+  <!-- App Library -->
+  <div id="lib" class="sheet">
+    <div class="done" id="libDone">Done</div>
+    <h2>App Library</h2>
+    <div class="agrid" id="libGrid"></div>
+  </div>
+
+  <!-- Customize app -->
+  <div id="cz" class="sheet">
+    <div class="done" id="czDone">Done</div>
+    <h2>Customize</h2>
+
+    <div class="sec">Wallpaper</div>
+    <div class="card"><div class="walls" id="walls"></div></div>
+
+    <div class="sec">Icons</div>
+    <div class="card">
+      <div class="row"><span>Icon size</span><input id="czSize" type="range" min="40" max="64" step="1"></div>
+      <div class="row"><span>Columns</span><div class="seg" id="czCols"></div></div>
+      <div class="row"><span>Shape</span><div class="seg" id="czShape"></div></div>
+      <div class="row"><span>App names</span><div class="sw" id="czLabels"></div></div>
+    </div>
+
+    <div class="sec">Home screen</div>
+    <div class="card">
+      <div class="row"><span>Show clock</span><div class="sw" id="czClock"></div></div>
+    </div>
+
+    <div class="sec">Dock (pick up to 4)</div>
+    <div class="card" id="czDock"></div>
+
+    <div class="sec">Hide apps from Home</div>
+    <div class="card" id="czHide"></div>
+    <div class="small">Hidden apps stay in the App Library (swipe up on Home).</div>
+
+    <div class="sec"> </div>
+    <div class="card"><div class="row" id="czReset" style="color:#ff6b6b;justify-content:center">Reset everything</div></div>
+  </div>
+
+  <!-- Control Center -->
+  <div id="cc" class="sheet">
     <h2>Control Center</h2>
-    <div class="grid">
-      <div class="tile" data-a="wifi"><svg viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r=".8"/></svg>Wi‑Fi</div>
-      <div class="tile" data-a="bt"><svg viewBox="0 0 24 24"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg>Bluetooth</div>
-      <div class="tile" data-a="air"><svg viewBox="0 0 24 24"><path d="M21 15l-8-4V5a1 1 0 0 0-2 0v6l-8 4v2l8-2v4l-2 1v1l3-.5 3 .5v-1l-2-1v-4l8 2z"/></svg>Airplane</div>
-      <div class="tile" data-a="display"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Display</div>
-      <div class="tile" data-a="torch"><svg viewBox="0 0 24 24"><path d="M9 2h6l-1 6h-4zM10 8v5l-2 2v7h8v-7l-2-2V8"/></svg>Torch</div>
-      <div class="tile" data-a="camera"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Camera</div>
-      <div class="tile" data-a="calc"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M12 12h2M8 16h2M12 16h2"/></svg>Calculator</div>
-      <div class="tile" data-a="clock"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Clock</div>
-      <div class="wide"><span>Volume</span><input id="vol" type="range" min="0" max="100" value="50"></div>
-      <div class="tile" data-a="notif" style="grid-column: span 4; aspect-ratio: auto; padding: 14px;">Show notifications</div>
+    <div class="grid" id="ccGrid">
+      <div class="banner" id="ccBanner"><b>Turn on Full Control</b>Needed for Lock, Screenshot, Power menu and Recents. It only performs actions; it never reads your screen.<br><button class="pill" id="ccA11y">Open Accessibility settings</button></div>
     </div>
     <div id="ccClose">Swipe up or tap here to close</div>
   </div>
@@ -76,13 +144,47 @@
 (function () {
   var A = window.Android;
   var $ = function (id) { return document.getElementById(id); };
+  var msgT;
+  function msg(t) { var m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(msgT); msgT = setTimeout(function () { m.style.display = 'none'; }, 2400); }
 
-  function tick() {
-    var d = new Date();
-    $('time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/ ?[AP]M/i, '');
-    $('date').textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  /* ---------- Settings ---------- */
+  var DEF = { wall: 'aurora', cols: 4, size: 54, labels: true, shape: 'squircle', clock: true, hidden: [], dock: [] };
+  var cfg = load();
+  function load() { try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem('ios27cfg') || '{}')); } catch (e) { return Object.assign({}, DEF); } }
+  function save() { try { localStorage.setItem('ios27cfg', JSON.stringify(cfg)); } catch (e) {} }
+  function customWall() { try { return localStorage.getItem('ios27wall') || ''; } catch (e) { return ''; } }
+
+  var SCRIM = 'linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.30))';
+  var WALLS = {
+    aurora:   { name: 'Aurora',   css: 'radial-gradient(60% 42% at 18% 14%, #ff7ad9 0, transparent 62%), radial-gradient(55% 40% at 88% 22%, #6c5cff 0, transparent 62%), radial-gradient(75% 50% at 72% 88%, #2fb7ff 0, transparent 66%), radial-gradient(60% 44% at 8% 92%, #ffb35c 0, transparent 62%), #1c1346' },
+    dusk:     { name: 'Dusk',     css: 'radial-gradient(70% 45% at 80% 10%, #ffcf6b 0, transparent 60%), radial-gradient(70% 50% at 15% 55%, #ff5f8f 0, transparent 62%), radial-gradient(80% 55% at 70% 95%, #5a3bd6 0, transparent 66%), #2a1448' },
+    lagoon:   { name: 'Lagoon',   css: 'radial-gradient(60% 40% at 20% 12%, #7dffd6 0, transparent 60%), radial-gradient(70% 50% at 85% 50%, #2a8cff 0, transparent 64%), radial-gradient(70% 45% at 25% 95%, #1fd1b5 0, transparent 62%), #06284a' },
+    bloom:    { name: 'Bloom',    css: 'radial-gradient(60% 40% at 80% 12%, #ffd1e8 0, transparent 60%), radial-gradient(70% 50% at 12% 45%, #c9b6ff 0, transparent 62%), radial-gradient(70% 50% at 80% 90%, #ffb59a 0, transparent 64%), #6a4fa8' },
+    graphite: { name: 'Graphite', css: 'radial-gradient(70% 45% at 25% 15%, #5a6173 0, transparent 62%), radial-gradient(70% 50% at 85% 85%, #3a4a6a 0, transparent 66%), #12141a' }
+  };
+
+  function applyWall() {
+    var w = $('wall');
+    if (cfg.wall === 'system') { w.style.background = SCRIM; return; }
+    if (cfg.wall === 'custom' && customWall()) { w.style.background = SCRIM + ', url("' + customWall() + '") center/cover'; return; }
+    var p = WALLS[cfg.wall] || WALLS.aurora;
+    w.style.background = SCRIM + ', ' + p.css;
   }
-  tick(); setInterval(tick, 20000);
+
+  var RADIUS = { squircle: '22%', circle: '50%', square: '10%' };
+  function applyCfg() {
+    document.documentElement.style.setProperty('--rad', RADIUS[cfg.shape] || '22%');
+    document.documentElement.style.setProperty('--cols', cfg.cols);
+    document.body.classList.toggle('nolabels', !cfg.labels);
+    $('clock').style.display = cfg.clock ? '' : 'none';
+    applyWall();
+  }
+
+  /* ---------- Apps ---------- */
+  var VIRT = {
+    '__apps__':  { name: 'Apps', svg: '<svg viewBox="0 0 48 48"><rect width="48" height="48" fill="#3a3a46"/><rect x="10" y="10" width="12" height="12" rx="3" fill="#fff"/><rect x="26" y="10" width="12" height="12" rx="3" fill="#fff" opacity=".8"/><rect x="10" y="26" width="12" height="12" rx="3" fill="#fff" opacity=".8"/><rect x="26" y="26" width="12" height="12" rx="3" fill="#fff"/></svg>' },
+    '__custom__': { name: 'Customize', svg: '<svg viewBox="0 0 48 48"><rect width="48" height="48" fill="#7c4dff"/><path d="M10 16h28M10 24h28M10 32h28" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".5"/><circle cx="18" cy="16" r="4.5" fill="#fff"/><circle cx="31" cy="24" r="4.5" fill="#fff"/><circle cx="21" cy="32" r="4.5" fill="#fff"/></svg>' }
+  };
 
   function getApps() {
     if (A) { try { return JSON.parse(A.getApps()); } catch (e) {} }
@@ -92,49 +194,60 @@
 
   function tile(app) {
     var el = document.createElement('div'); el.className = 'app';
-    var ico = document.createElement('div'); ico.className = 'ico'; ico.textContent = app.name.charAt(0).toUpperCase();
+    var ico = document.createElement('div'); ico.className = 'ico';
+    var v = VIRT[app.pkg];
+    if (v) { ico.innerHTML = v.svg; } else { ico.textContent = app.name.charAt(0).toUpperCase(); }
     var lbl = document.createElement('div'); lbl.className = 'lbl'; lbl.textContent = app.name;
     el.appendChild(ico); el.appendChild(lbl);
-    el.addEventListener('click', function () { if (A) A.openApp(app.pkg); });
-    if (A) setTimeout(function () {
+    el.addEventListener('click', function () {
+      if (app.pkg === '__apps__') openLib();
+      else if (app.pkg === '__custom__') openCz();
+      else if (A) { closeAll(); A.openApp(app.pkg); }
+    });
+    if (A && !v) setTimeout(function () {
       var src = A.getIcon(app.pkg);
       if (src) { var img = new Image(); img.src = src; ico.textContent = ''; ico.style.background = 'transparent'; ico.appendChild(img); }
     }, 0);
     return el;
   }
 
-  // Size the grid to the screen so every page fits with no clipping
   function layout() {
     var pages = $('pages');
     var w = pages.clientWidth || window.innerWidth;
     var h = pages.clientHeight || 400;
-    var ico = Math.max(44, Math.min(54, Math.floor(w / 4 - 22)));
-    var cell = ico + 30;
+    var ico = Math.max(38, Math.min(cfg.size, Math.floor(w / cfg.cols - 14)));
+    var cell = ico + (cfg.labels ? 30 : 16);
     var rows = Math.max(3, Math.floor((h - 12) / cell));
-    var root = document.documentElement.style;
-    root.setProperty('--ico', ico + 'px');
-    root.setProperty('--cell', cell + 'px');
-    return rows * 4;
+    var r = document.documentElement.style;
+    r.setProperty('--ico', ico + 'px'); r.setProperty('--cell', cell + 'px');
+    return rows * cfg.cols;
   }
 
   var lastPer = 0;
   function render() {
     var per = layout(); lastPer = per;
-    var apps = getApps();
+    var all = getApps();
+    var home = all.filter(function (a) { return cfg.hidden.indexOf(a.pkg) < 0; });
+
     var dockApps = [];
-    [/dialer/, /messag/, /camera/, /chrome|browser/].forEach(function (re) {
-      var i = apps.findIndex(function (a) { return re.test(a.pkg.toLowerCase()); });
-      if (i >= 0) dockApps.push(apps.splice(i, 1)[0]);
-    });
+    if (cfg.dock.length) {
+      cfg.dock.forEach(function (p) { var i = home.findIndex(function (a) { return a.pkg === p; }); if (i >= 0) dockApps.push(home.splice(i, 1)[0]); });
+    } else {
+      [/dialer/, /messag/, /camera/, /chrome|browser/].forEach(function (re) {
+        var i = home.findIndex(function (a) { return re.test(a.pkg.toLowerCase()); });
+        if (i >= 0) dockApps.push(home.splice(i, 1)[0]);
+      });
+    }
     var dock = $('dock'); dock.innerHTML = '';
     dockApps.forEach(function (a) { dock.appendChild(tile(a)); });
-    if (!dockApps.length) dock.style.display = 'none'; else dock.style.display = 'flex';
+    dock.appendChild(tile({ name: 'Apps', pkg: '__apps__' }));
 
+    home.unshift({ name: 'Customize', pkg: '__custom__' });
     var pages = $('pages'), dots = $('dots');
     pages.innerHTML = ''; dots.innerHTML = '';
-    for (var i = 0; i < apps.length; i += per) {
+    for (var i = 0; i < home.length; i += per) {
       var p = document.createElement('div'); p.className = 'page';
-      apps.slice(i, i + per).forEach(function (a) { p.appendChild(tile(a)); });
+      home.slice(i, i + per).forEach(function (a) { p.appendChild(tile(a)); });
       pages.appendChild(p);
       dots.appendChild(document.createElement('i'));
     }
@@ -149,42 +262,236 @@
   $('pages').addEventListener('scroll', updateDots);
   window.addEventListener('resize', function () { if (layout() !== lastPer) render(); });
 
-  // ---- Control Center + notification shade ----
-  var cc = $('cc');
-  function openCC() { cc.classList.add('show'); if (A) { try { $('vol').value = A.getVolume(); } catch (e) {} } }
+  function tick() {
+    var d = new Date();
+    $('time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/ ?[AP]M/i, '');
+    $('date').textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  }
+  tick(); setInterval(tick, 20000);
+
+  /* ---------- Overlays ---------- */
+  var lib = $('lib'), cz = $('cz'), cc = $('cc');
+  function isOpen(el) { return el.classList.contains('show'); }
+  function closeAll() { lib.classList.remove('show'); cz.classList.remove('show'); cc.classList.remove('show'); }
+
+  function openLib() {
+    closeAll();
+    var g = $('libGrid'); g.innerHTML = '';
+    getApps().forEach(function (a) { g.appendChild(tile(a)); });
+    lib.classList.add('show');
+  }
+  $('libDone').addEventListener('click', closeAll);
+
+  /* ---------- Customize ---------- */
+  function seg(el, opts, cur, cb) {
+    el.innerHTML = '';
+    opts.forEach(function (o) {
+      var s = document.createElement('span'); s.textContent = o[1]; if (String(o[0]) === String(cur)) s.className = 'on';
+      s.addEventListener('click', function () { cb(o[0]); seg(el, opts, o[0], cb); });
+      el.appendChild(s);
+    });
+  }
+  function sw(el, val, cb) {
+    el.classList.toggle('on', !!val);
+    el.onclick = function () { var v = !el.classList.contains('on'); el.classList.toggle('on', v); cb(v); };
+  }
+  function changed() { save(); applyCfg(); render(); }
+
+  function buildWalls() {
+    var box = $('walls'); box.innerHTML = '';
+    Object.keys(WALLS).forEach(function (k) {
+      var d = document.createElement('div'); d.className = 'wl' + (cfg.wall === k ? ' on' : '');
+      d.style.backgroundImage = WALLS[k].css.split(', #')[0]; // layered gradient preview
+      d.style.background = WALLS[k].css; d.textContent = WALLS[k].name;
+      d.onclick = function () { cfg.wall = k; save(); applyWall(); buildWalls(); };
+      box.appendChild(d);
+    });
+    var s = document.createElement('div'); s.className = 'wl sys' + (cfg.wall === 'system' ? ' on' : ''); s.textContent = 'My wallpaper';
+    s.onclick = function () { cfg.wall = 'system'; save(); applyWall(); buildWalls(); };
+    box.appendChild(s);
+    if (customWall()) {
+      var c = document.createElement('div'); c.className = 'wl' + (cfg.wall === 'custom' ? ' on' : '');
+      c.style.backgroundImage = 'url("' + customWall() + '")'; c.textContent = 'Photo';
+      c.onclick = function () { cfg.wall = 'custom'; save(); applyWall(); buildWalls(); };
+      box.appendChild(c);
+    }
+    var p = document.createElement('div'); p.className = 'wl pick'; p.textContent = '+ Choose photo';
+    p.onclick = function () { if (A) A.pickWallpaper(); else msg('Only works inside the launcher app'); };
+    box.appendChild(p);
+  }
+  window.onWallpaper = function (data) {
+    try { localStorage.setItem('ios27wall', data); } catch (e) { msg('Photo too large to save'); return; }
+    cfg.wall = 'custom'; save(); applyWall(); buildWalls();
+  };
+
+  function buildLists() {
+    var apps = getApps();
+    var dock = $('czDock'); dock.innerHTML = '';
+    apps.forEach(function (a) {
+      var r = document.createElement('div'); r.className = 'row'; r.innerHTML = '<span></span><div class="sw"></div>';
+      r.firstChild.textContent = a.name;
+      var s = r.lastChild; s.classList.toggle('on', cfg.dock.indexOf(a.pkg) >= 0);
+      s.onclick = function () {
+        var i = cfg.dock.indexOf(a.pkg);
+        if (i >= 0) cfg.dock.splice(i, 1);
+        else { if (cfg.dock.length >= 4) { msg('The dock holds 4 apps'); return; } cfg.dock.push(a.pkg); }
+        s.classList.toggle('on', cfg.dock.indexOf(a.pkg) >= 0); changed();
+      };
+      dock.appendChild(r);
+    });
+    var hide = $('czHide'); hide.innerHTML = '';
+    apps.forEach(function (a) {
+      var r = document.createElement('div'); r.className = 'row'; r.innerHTML = '<span></span><div class="sw"></div>';
+      r.firstChild.textContent = a.name;
+      var s = r.lastChild; s.classList.toggle('on', cfg.hidden.indexOf(a.pkg) >= 0);
+      s.onclick = function () {
+        var i = cfg.hidden.indexOf(a.pkg);
+        if (i >= 0) cfg.hidden.splice(i, 1); else cfg.hidden.push(a.pkg);
+        s.classList.toggle('on', cfg.hidden.indexOf(a.pkg) >= 0); changed();
+      };
+      hide.appendChild(r);
+    });
+  }
+
+  function openCz() {
+    closeAll();
+    buildWalls(); buildLists();
+    $('czSize').value = cfg.size;
+    $('czSize').oninput = function (e) { cfg.size = parseInt(e.target.value, 10); changed(); };
+    seg($('czCols'), [[4, '4'], [5, '5']], cfg.cols, function (v) { cfg.cols = v; changed(); });
+    seg($('czShape'), [['squircle', 'Rounded'], ['circle', 'Circle'], ['square', 'Square']], cfg.shape, function (v) { cfg.shape = v; changed(); });
+    sw($('czLabels'), cfg.labels, function (v) { cfg.labels = v; changed(); });
+    sw($('czClock'), cfg.clock, function (v) { cfg.clock = v; changed(); });
+    $('czReset').onclick = function () {
+      cfg = Object.assign({}, DEF, { hidden: [], dock: [] }); save();
+      try { localStorage.removeItem('ios27wall'); } catch (e) {}
+      applyCfg(); render(); openCz(); msg('Reset to defaults');
+    };
+    cz.classList.add('show');
+  }
+  $('czDone').addEventListener('click', closeAll);
+
+  /* ---------- Control Center ---------- */
+  var IC = {
+    wifi: 'M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01',
+    bt: 'M7 7l10 10-5 4V3l5 4L7 17',
+    data: 'M5 20v-4M10 20v-8M15 20V8M20 20V4',
+    air: 'M21 15l-8-4V5a1 1 0 0 0-2 0v6l-8 4v2l8-2v4l-2 1v1l3-.5 3 .5v-1l-2-1v-4l8 2z',
+    torch: 'M9 2h6l-1 6h-4zM10 8v5l-2 2v7h8v-7l-2-2V8',
+    dnd: 'M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z',
+    rotate: 'M4 12a8 8 0 0 1 14-5l2-2v6h-6l2.3-2.3A5.5 5.5 0 0 0 6 12M20 12a8 8 0 0 1-14 5l-2 2v-6h6l-2.3 2.3',
+    silent: 'M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4',
+    loc: 'M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11zM12 10m-2 0a2 2 0 1 0 4 0 2 2 0 1 0-4 0',
+    hot: 'M12 12m-2 0a2 2 0 1 0 4 0 2 2 0 1 0-4 0M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9',
+    bat: 'M3 8h15v8H3zM18 11h3v2h-3z',
+    nfc: 'M7 8c3 2 3 6 0 8M11 5c5 3 5 11 0 14M15 3c7 4 7 14 0 18',
+    lock: 'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',
+    shot: 'M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9h8v6H8z',
+    power: 'M12 3v8M6.5 6.5a8 8 0 1 0 11 0',
+    rec: 'M5 7h10v10H5zM9 4h10v10',
+    cam: 'M4 8h3l2-3h6l2 3h3v11H4zM12 13m-3.5 0a3.5 3.5 0 1 0 7 0 3.5 3.5 0 1 0-7 0',
+    calc: 'M5 3h14v18H5zM8 7h8M8 12h2M12 12h2M8 16h2M12 16h2',
+    clk: 'M12 12m-9 0a9 9 0 1 0 18 0 9 9 0 1 0-18 0M12 7v5l3 2',
+    set: 'M12 12m-3 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2'
+  };
+  var TILES = [
+    ['wifi', 'Wi‑Fi', 'wifi'], ['bt', 'Bluetooth', 'bt'], ['data', 'Mobile data', 'data'], ['air', 'Airplane', 'air'],
+    ['torch', 'Torch', 'torch'], ['dnd', 'Focus', 'dnd'], ['rotate', 'Rotation', 'rotate'], ['silent', 'Silent', 'silent'],
+    ['location', 'Location', 'loc'], ['hotspot', 'Hotspot', 'hot'], ['saver', 'Battery saver', 'bat'], ['nfc', 'NFC', 'nfc'],
+    ['lock', 'Lock', 'lock'], ['shot', 'Screenshot', 'shot'], ['power', 'Power menu', 'power'], ['recents', 'Recents', 'rec'],
+    ['camera', 'Camera', 'cam'], ['calc', 'Calculator', 'calc'], ['clock', 'Clock', 'clk'], ['settings', 'Settings', 'set']
+  ];
+  var STATE_KEY = { wifi: 'wifi', bt: 'bt', torch: 'torch', dnd: 'dnd', rotate: 'rotate', silent: 'silent' };
+  var NEEDS_A11Y = { lock: 1, shot: 1, power: 1, recents: 1 };
+  var st = {};
+
+  function buildCC() {
+    var g = $('ccGrid');
+    Array.prototype.slice.call(g.children).forEach(function (c) { if (c.id !== 'ccBanner') g.removeChild(c); });
+    TILES.forEach(function (t) {
+      var d = document.createElement('div'); d.className = 'tile'; d.setAttribute('data-id', t[0]);
+      d.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + IC[t[2]] + '"/></svg><span>' + t[1] + '</span>';
+      d.onclick = function () { tap(t[0]); };
+      g.appendChild(d);
+    });
+    var br = document.createElement('div'); br.className = 'wide';
+    br.innerHTML = '<span>Brightness</span><input id="bri" type="range" min="1" max="100">'; g.appendChild(br);
+    var vo = document.createElement('div'); vo.className = 'wide';
+    vo.innerHTML = '<span>Volume</span><input id="vol" type="range" min="0" max="100">'; g.appendChild(vo);
+    var md = document.createElement('div'); md.className = 'wide btns';
+    md.innerHTML = '<span data-m="prev">⏮</span><span data-m="play">⏯</span><span data-m="next">⏭</span>'; g.appendChild(md);
+    var nb = document.createElement('div'); nb.className = 'wide btns'; nb.style.fontSize = '13px';
+    nb.innerHTML = '<span data-n="notifications">Notifications</span><span data-n="quick">System quick settings</span>'; g.appendChild(nb);
+
+    $('bri').oninput = function (e) { if (A) A.setBrightness(parseInt(e.target.value, 10)); };
+    $('vol').oninput = function (e) { if (A) A.setVolume(parseInt(e.target.value, 10)); };
+    Array.prototype.forEach.call(md.querySelectorAll('[data-m]'), function (s) { s.onclick = function () { if (A) A.media(s.getAttribute('data-m')); }; });
+    Array.prototype.forEach.call(nb.querySelectorAll('[data-n]'), function (s) {
+      s.onclick = function () {
+        if (!A) return; closeAll();
+        setTimeout(function () { if (s.getAttribute('data-n') === 'quick') A.openQuickSettings(); else A.openNotifications(); }, 150);
+      };
+    });
+  }
+
+  function refresh() {
+    if (!A) return;
+    try { st = JSON.parse(A.getStates()); } catch (e) { st = {}; }
+    Array.prototype.forEach.call($('ccGrid').querySelectorAll('.tile'), function (t) {
+      var k = STATE_KEY[t.getAttribute('data-id')];
+      t.classList.toggle('on', !!(k && st[k]));
+    });
+    $('ccBanner').style.display = st.a11y ? 'none' : 'block';
+    if (st.brightness != null && $('bri')) $('bri').value = st.brightness;
+    if (st.volume != null && $('vol')) $('vol').value = st.volume;
+  }
+
+  function openCC() { closeAll(); buildCC(); cc.classList.add('show'); refresh(); }
   function closeCC() { cc.classList.remove('show'); }
-  $('ccClose').addEventListener('click', closeCC);
+  $('ccClose').onclick = closeCC;
+  $('ccA11y').onclick = function () { if (A) A.openAccessibilitySettings(); };
 
-  var torch = false;
-  cc.addEventListener('click', function (e) {
-    var t = e.target.closest('.tile'); if (!t || !A) return;
-    var a = t.getAttribute('data-a');
-    if (a === 'torch') { torch = !torch; A.setTorch(torch); t.classList.toggle('on', torch); return; }
-    if (a === 'notif') { closeCC(); A.openNotifications(); return; }
-    closeCC(); A.shortcut(a);
-  });
-  $('vol').addEventListener('input', function (e) { if (A) A.setVolume(parseInt(e.target.value, 10)); });
+  function tap(id) {
+    if (!A) { msg('Works inside the launcher app'); return; }
+    if (STATE_KEY[id] && (id === 'torch' || id === 'dnd' || id === 'rotate' || id === 'silent')) {
+      A.toggle(id); setTimeout(refresh, 400); return;
+    }
+    if (NEEDS_A11Y[id]) {
+      if (!st.a11y) { msg('Turn on Full Control first (banner above)'); $('ccBanner').style.display = 'block'; return; }
+      closeCC();
+      setTimeout(function () { A.globalAction(id); }, id === 'shot' ? 600 : 200);
+      return;
+    }
+    closeCC(); A.shortcut(id);
+  }
 
-  // Swipe down from the top strip: left side = notifications, right side = Control Center
-  var sy = null, sx = 0;
-  var grab = $('grab');
-  grab.addEventListener('touchstart', function (e) { sy = e.touches[0].clientY; sx = e.touches[0].clientX; }, { passive: true });
-  grab.addEventListener('touchend', function (e) {
-    if (sy === null) return;
-    var dy = e.changedTouches[0].clientY - sy;
-    if (dy > 40) {
+  window.onResumed = function () { if (isOpen(cc)) refresh(); };
+
+  /* ---------- Gestures ---------- */
+  var sx = 0, sy = 0, fromGrab = false;
+  document.addEventListener('touchstart', function (e) {
+    var t = e.touches[0]; sx = t.clientX; sy = t.clientY; fromGrab = e.target.id === 'grab';
+  }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (fromGrab && dy > 40) {                       // pull down from the top
       if (sx > window.innerWidth * 0.55) openCC();
       else if (A) A.openNotifications(); else openCC();
+      return;
     }
-    sy = null;
+    if (isOpen(cc)) { if (dy < -60) closeCC(); return; }
+    if (isOpen(lib) || isOpen(cz)) return;
+    if (dy < -70 && Math.abs(dx) < Math.abs(dy) * 0.6) openLib();   // swipe up on Home = App Library
   });
-  // Swipe up to close Control Center
-  var cy = null;
-  cc.addEventListener('touchstart', function (e) { cy = e.touches[0].clientY; }, { passive: true });
-  cc.addEventListener('touchend', function (e) { if (cy !== null && cy - e.changedTouches[0].clientY > 60) closeCC(); cy = null; });
 
-  window.onHome = function () { closeCC(); $('pages').scrollTo({ left: 0, behavior: 'smooth' }); };
+  window.onBack = function () {
+    if (isOpen(cc) || isOpen(lib) || isOpen(cz)) { closeAll(); return true; }
+    return false;
+  };
+  window.onHome = function () { closeAll(); $('pages').scrollTo({ left: 0, behavior: 'smooth' }); };
   window.onAppsChanged = render;
+
+  applyCfg();
   render();
 })();
 </script>

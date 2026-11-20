@@ -1,40 +1,38 @@
 package com.ios27.launcher
 
+import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
+import android.app.NotificationManager
+import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
-import android.media.AudioManager
-import android.os.Build
-import android.provider.AlarmClock
-import android.provider.MediaStore
-import android.provider.Settings
-import androidx.core.view.WindowCompat
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.Drawable
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
 import android.net.Uri
+import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
+import android.provider.AlarmClock
+import android.provider.MediaStore
+import android.provider.Settings
 import android.util.Base64
-import android.view.View
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
+import android.view.KeyEvent
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
-import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.core.view.WindowCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -43,20 +41,23 @@ import java.util.concurrent.ConcurrentHashMap
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
-    private lateinit var drawer: RecyclerView
-    private lateinit var search: EditText
-    private lateinit var adapter: AppAdapter
 
     @Volatile
     private var apps: List<AppInfo> = emptyList()
     private val iconCache = ConcurrentHashMap<String, String>()
+    private var torchOn = false
+
+    private val pickImage =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) Thread { loadWallpaper(uri) }.start()
+        }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Keep the real status bar and nav bar visible: white icons on a light dark scrim
+        // Keep the real status bar and nav bar readable: white icons on a light scrim
         window.statusBarColor = Color.parseColor("#55000000")
         window.navigationBarColor = Color.parseColor("#55000000")
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -65,15 +66,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView = findViewById(R.id.webView)
-        drawer = findViewById(R.id.appDrawer)
-        search = findViewById(R.id.searchBar)
-
-        // Drawer
-        adapter = AppAdapter(emptyList()) { launch(it) }
-        drawer.layoutManager = GridLayoutManager(this, 4)
-        drawer.adapter = adapter
-
-        // Home screen = your index.html, loaded from the app's own assets only
         webView.setBackgroundColor(Color.TRANSPARENT)
         with(webView.settings) {
             javaScriptEnabled = true
@@ -85,7 +77,6 @@ class MainActivity : AppCompatActivity() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val url = request.url
                 if (url.scheme == "file" && url.path?.startsWith("/android_asset/") == true) return false
-                // Anything else opens outside the launcher, never inside the WebView
                 try {
                     startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 } catch (_: Exception) {
@@ -96,36 +87,10 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(Bridge(), "Android")
         webView.loadUrl("file:///android_asset/index.html")
 
-        // Search
-        search.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) {
-                val q = s?.toString().orEmpty()
-                adapter.filter(q)
-                if (q.isNotBlank()) drawer.visibility = View.VISIBLE
-            }
-
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-        })
-        search.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                adapter.first()?.let { launch(it) }
-                true
-            } else false
-        }
-
-        findViewById<Button>(R.id.btnDrawer).setOnClickListener {
-            setDrawerVisible(drawer.visibility != View.VISIBLE)
-        }
-
-        // Back: close drawer, then WebView history, otherwise stay on the home screen
+        // Back closes whichever panel is open; otherwise it stays on the home screen
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                when {
-                    drawer.visibility == View.VISIBLE -> setDrawerVisible(false)
-                    webView.canGoBack() -> webView.goBack()
-                    else -> Unit
-                }
+                webView.evaluateJavascript("window.onBack ? window.onBack() : false", null)
             }
         })
     }
@@ -133,39 +98,28 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         loadApps()
+        webView.evaluateJavascript("window.onResumed && window.onResumed()", null)
     }
 
-    // Home button pressed while the launcher is already running
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.hasCategory(Intent.CATEGORY_HOME)) {
-            setDrawerVisible(false)
             webView.evaluateJavascript("window.onHome && window.onHome()", null)
         }
     }
 
-    private fun setDrawerVisible(visible: Boolean) {
-        drawer.visibility = if (visible) View.VISIBLE else View.GONE
-        if (!visible) {
-            search.setText("")
-            search.clearFocus()
-            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.hideSoftInputFromWindow(search.windowToken, 0)
-        }
-    }
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
-    private fun launch(app: AppInfo) = launchPackage(app.pkg, app.name)
-
-    private fun launchPackage(pkg: String, label: String) {
+    private fun launchPackage(pkg: String) {
         val intent = packageManager.getLaunchIntentForPackage(pkg)
-        if (intent != null) {
-            try {
-                startActivity(intent)
-            } catch (_: Exception) {
-                Toast.makeText(this, "Can't open $label", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(this, "Can't open $label", Toast.LENGTH_SHORT).show()
+        if (intent == null) {
+            toast("Can't open that app")
+            return
+        }
+        try {
+            startActivity(intent)
+        } catch (_: Exception) {
+            toast("Can't open that app")
         }
     }
 
@@ -185,7 +139,6 @@ class MainActivity : AppCompatActivity() {
                 if (!isFinishing && !isDestroyed) {
                     apps = list
                     iconCache.clear()
-                    adapter.submit(list)
                     webView.evaluateJavascript("window.onAppsChanged && window.onAppsChanged()", null)
                 }
             }
@@ -216,7 +169,83 @@ class MainActivity : AppCompatActivity() {
         return ContextCompat.getDrawable(this, res)
     }
 
-    /** Functions your index.html can call as Android.getApps(), Android.getIcon(pkg), Android.openApp(pkg). */
+    private fun loadWallpaper(uri: Uri) {
+        try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1
+            while (bounds.outWidth / sample > 1400 || bounds.outHeight / sample > 2400) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            val bmp = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+            if (bmp == null) {
+                runOnUiThread { toast("Couldn't load that image") }
+                return
+            }
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.JPEG, 80, out)
+            val data = "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+            runOnUiThread { webView.evaluateJavascript("window.onWallpaper(" + JSONObject.quote(data) + ")", null) }
+        } catch (_: Exception) {
+            runOnUiThread { toast("Couldn't load that image") }
+        }
+    }
+
+    private fun canWrite(): Boolean =
+        if (Build.VERSION.SDK_INT >= 23) Settings.System.canWrite(this) else true
+
+    private fun requestWrite() {
+        toast("Allow \"Modify system settings\" for this launcher, then try again")
+        try {
+            startActivity(
+                Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun setTorchMode(on: Boolean) {
+        try {
+            val cm = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val id = cm.cameraIdList.firstOrNull {
+                cm.getCameraCharacteristics(it).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            }
+            if (id == null) {
+                toast("No torch on this phone")
+                return
+            }
+            cm.setTorchMode(id, on)
+            torchOn = on
+        } catch (_: Exception) {
+            toast("Torch not available")
+        }
+    }
+
+    private fun globalAction(name: String): Boolean {
+        val svc = ControlService.instance ?: return false
+        val action = when (name) {
+            "notifications" -> AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS
+            "quick" -> AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS
+            "power" -> AccessibilityService.GLOBAL_ACTION_POWER_DIALOG
+            "recents" -> AccessibilityService.GLOBAL_ACTION_RECENTS
+            "lock" -> if (Build.VERSION.SDK_INT >= 28) AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN else return false
+            "shot" -> if (Build.VERSION.SDK_INT >= 28) AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT else return false
+            else -> return false
+        }
+        return svc.performGlobalAction(action)
+    }
+
+    @SuppressLint("WrongConstant")
+    private fun expandPanel(method: String) {
+        try {
+            val sb = getSystemService("statusbar")
+            Class.forName("android.app.StatusBarManager").getMethod(method).invoke(sb)
+        } catch (_: Exception) {
+            toast("Swipe down from the very top of the screen")
+        }
+    }
+
+    /** What index.html can call: Android.getApps(), getIcon(pkg), openApp(pkg) and the Control Center helpers. */
     inner class Bridge {
         @JavascriptInterface
         fun getApps(): String {
@@ -247,30 +276,123 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun openApp(pkg: String) {
-            runOnUiThread { launchPackage(pkg, pkg) }
+            runOnUiThread { launchPackage(pkg) }
         }
 
         @JavascriptInterface
-        fun openNotifications() { runOnUiThread { expandPanel("expandNotificationsPanel") } }
+        fun pickWallpaper() {
+            runOnUiThread { pickImage.launch("image/*") }
+        }
 
         @JavascriptInterface
-        fun setTorch(on: Boolean) {
-            try {
-                val cm = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-                val id = cm.cameraIdList.firstOrNull {
-                    cm.getCameraCharacteristics(it).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-                } ?: return
-                cm.setTorchMode(id, on)
-            } catch (_: Exception) {
-                runOnUiThread { Toast.makeText(this@MainActivity, "Torch not available", Toast.LENGTH_SHORT).show() }
+        fun openNotifications() {
+            runOnUiThread { if (!this@MainActivity.globalAction("notifications")) expandPanel("expandNotificationsPanel") }
+        }
+
+        @JavascriptInterface
+        fun openQuickSettings() {
+            runOnUiThread { if (!this@MainActivity.globalAction("quick")) expandPanel("expandSettingsPanel") }
+        }
+
+        /** Returns "ok", or "need:a11y" when Full Control isn't switched on yet. */
+        @JavascriptInterface
+        fun globalAction(name: String): String {
+            return if (this@MainActivity.globalAction(name)) "ok" else "need:a11y"
+        }
+
+        @JavascriptInterface
+        fun openAccessibilitySettings() {
+            runOnUiThread {
+                toast("Find \"iOS 27 Launcher\" and switch it on")
+                try {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                }
             }
         }
 
         @JavascriptInterface
-        fun getVolume(): Int {
+        fun getStates(): String {
+            val o = JSONObject()
             val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            try {
+                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                o.put("wifi", wm.isWifiEnabled)
+            } catch (_: Exception) {
+            }
+            try {
+                @Suppress("DEPRECATION")
+                o.put("bt", BluetoothAdapter.getDefaultAdapter()?.isEnabled == true)
+            } catch (_: Exception) {
+            }
+            o.put("torch", torchOn)
+            o.put("a11y", ControlService.instance != null)
+            o.put("write", canWrite())
+            o.put("silent", am.ringerMode != AudioManager.RINGER_MODE_NORMAL)
+            if (Build.VERSION.SDK_INT >= 23) {
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                o.put("dnd", nm.currentInterruptionFilter in 2..4)
+            }
+            try {
+                o.put("rotate", Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 1) == 1)
+                o.put("brightness", Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128) * 100 / 255)
+            } catch (_: Exception) {
+            }
             val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-            return am.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / max
+            o.put("volume", am.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / max)
+            return o.toString()
+        }
+
+        /** torch, dnd, rotate, silent. Returns "ok" or "need:write" / "need:dnd". */
+        @JavascriptInterface
+        fun toggle(name: String): String {
+            runOnUiThread {
+                when (name) {
+                    "torch" -> setTorchMode(!torchOn)
+                    "silent" -> {
+                        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                        am.ringerMode = if (am.ringerMode == AudioManager.RINGER_MODE_NORMAL)
+                            AudioManager.RINGER_MODE_VIBRATE else AudioManager.RINGER_MODE_NORMAL
+                    }
+                    "rotate" -> {
+                        if (!canWrite()) requestWrite() else {
+                            val on = Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 1) == 1
+                            Settings.System.putInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, if (on) 0 else 1)
+                        }
+                    }
+                    "dnd" -> {
+                        if (Build.VERSION.SDK_INT >= 23) {
+                            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            if (!nm.isNotificationPolicyAccessGranted) {
+                                toast("Allow Do Not Disturb access for this launcher, then try again")
+                                try {
+                                    startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                } catch (_: Exception) {
+                                }
+                            } else {
+                                val on = nm.currentInterruptionFilter in 2..4
+                                nm.setInterruptionFilter(
+                                    if (on) NotificationManager.INTERRUPTION_FILTER_ALL
+                                    else NotificationManager.INTERRUPTION_FILTER_PRIORITY
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            return "ok"
+        }
+
+        @JavascriptInterface
+        fun setBrightness(percent: Int) {
+            runOnUiThread {
+                if (!canWrite()) {
+                    requestWrite()
+                } else {
+                    Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+                    Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, (percent.coerceIn(1, 100) * 255 / 100))
+                }
+            }
         }
 
         @JavascriptInterface
@@ -281,32 +403,44 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun media(key: String) {
+            val code = when (key) {
+                "play" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
+                "prev" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                else -> return
+            }
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+        }
+
+        @JavascriptInterface
         fun shortcut(name: String) {
             runOnUiThread {
                 val intent = when (name) {
-                    "wifi" -> if (Build.VERSION.SDK_INT >= 29) Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY) else Intent(Settings.ACTION_WIFI_SETTINGS)
+                    "wifi", "data" ->
+                        if (Build.VERSION.SDK_INT >= 29) Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY)
+                        else Intent(if (name == "wifi") Settings.ACTION_WIFI_SETTINGS else Settings.ACTION_DATA_ROAMING_SETTINGS)
                     "bt" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
                     "air" -> Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)
                     "display" -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
+                    "location" -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                    "hotspot" -> Intent().setClassName("com.android.settings", "com.android.settings.TetherSettings")
+                    "saver" -> Intent("android.settings.BATTERY_SAVER_SETTINGS")
+                    "nfc" -> Intent(Settings.ACTION_NFC_SETTINGS)
+                    "settings" -> Intent(Settings.ACTION_SETTINGS)
                     "camera" -> Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
                     "calc" -> Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALCULATOR)
                     "clock" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
                     else -> return@runOnUiThread
                 }
-                try { startActivity(intent) } catch (_: Exception) {
-                    Toast.makeText(this@MainActivity, "Not available on this phone", Toast.LENGTH_SHORT).show()
+                try {
+                    startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                    toast("Not available on this phone")
                 }
             }
-        }
-    }
-
-    @SuppressLint("WrongConstant")
-    private fun expandPanel(method: String) {
-        try {
-            val sb = getSystemService("statusbar")
-            Class.forName("android.app.StatusBarManager").getMethod(method).invoke(sb)
-        } catch (_: Exception) {
-            Toast.makeText(this, "Swipe down from the very top of the screen", Toast.LENGTH_SHORT).show()
         }
     }
 }

@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">iOS 27 Launcher</string>
+    <string name="a11y_desc">Lets the launcher lock the screen, take screenshots, open the power menu, recent apps and the notification panel from Control Center. It does not read your screen.</string>
 </resources>
