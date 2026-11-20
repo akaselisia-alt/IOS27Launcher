@@ -13,9 +13,11 @@
   #wall { position: fixed; inset: 0; z-index: 0; background-size: cover; background-position: center; }
   #clock, #pages, #dots, #dock { position: relative; z-index: 1; }
 
-  #clock { text-align: center; padding: 14px 0 2px; text-shadow: 0 1px 8px rgba(0,0,0,.4); flex: none; }
-  #time { font-size: 52px; font-weight: 300; letter-spacing: -2px; line-height: 1.05; }
-  #date { font-size: 14px; opacity: .92; }
+  #clock { text-align: center; padding: 12px 0 2px; flex: none; filter: drop-shadow(0 2px 8px rgba(0,0,0,.25)); }
+  /* Same tall, upright, stretched clock as the lock screen */
+  #time, #lsTime { display: inline-block; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; font-style: normal; transform-origin: 50% 0; background: linear-gradient(180deg, rgba(255,255,255,.98) 10%, rgba(255,255,255,.58) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+  #time { font-size: 58px; letter-spacing: -3px; transform: scaleY(1.45); margin-bottom: 26px; }
+  #date { font-size: 15px; font-weight: 600; opacity: .92; letter-spacing: .2px; }
 
   #pages { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-behavior: smooth; overscroll-behavior: contain; scrollbar-width: none; }
   #pages::-webkit-scrollbar { display: none; }
@@ -121,11 +123,11 @@
   #ls { position: fixed; inset: 0; z-index: 20; display: none; transform: translate3d(0,0,0); transition: transform .5s var(--ease); background: #101018; overflow: hidden; touch-action: none; will-change: transform; }
   #ls.show { display: block; }
   #lsWall { position: absolute; inset: 0; background-size: cover; background-position: center; }
-  #lsTop { position: absolute; top: 9%; left: 0; right: 0; text-align: center; text-shadow: 0 2px 14px rgba(0,0,0,.25); }
+  #lsTop { position: absolute; top: 8%; left: 0; right: 0; text-align: center; filter: drop-shadow(0 2px 14px rgba(0,0,0,.25)); }
   #lsLock { height: 20px; margin-bottom: 8px; opacity: .9; }
   #lsLock svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   #lsDate { font-size: 19px; font-weight: 600; opacity: .92; letter-spacing: .2px; }
-  #lsTime { font-size: 104px; font-weight: 700; letter-spacing: -4px; line-height: 1.02; background: linear-gradient(180deg, rgba(255,255,255,.98) 10%, rgba(255,255,255,.58) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-variant-numeric: tabular-nums; }
+  #lsTime { font-size: 100px; letter-spacing: -5px; transform: scaleY(1.5); margin-bottom: 50px; }
   #lsBtns { position: absolute; left: 0; right: 0; bottom: 74px; display: flex; justify-content: space-between; padding: 0 44px; }
   .gl { width: 54px; height: 54px; border-radius: 50%; background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.3); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; transition: transform .3s var(--spring), background .2s; }
   .gl:active { transform: scale(.9); }
