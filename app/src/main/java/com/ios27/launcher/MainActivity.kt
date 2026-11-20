@@ -2,7 +2,17 @@ package com.ios27.launcher
 
 import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
+import android.app.AppOpsManager
 import android.app.NotificationManager
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.os.Process
+import android.speech.RecognizerIntent
+import android.view.View
+import java.net.HttpURLConnection
+import java.net.URL
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
@@ -46,6 +56,19 @@ class MainActivity : AppCompatActivity() {
     private var apps: List<AppInfo> = emptyList()
     private val iconCache = ConcurrentHashMap<String, String>()
     private var torchOn = false
+    private var wasScreenOff = false
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            wasScreenOff = true
+        }
+    }
+
+    private val speech =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+            val t = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (t != null) webView.evaluateJavascript("window.onSpeech(" + JSONObject.quote(t) + ")", null)
+        }
 
     private val pickImage =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -66,6 +89,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView = findViewById(R.id.webView)
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        ContextCompat.registerReceiver(
+            this, screenReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         webView.setBackgroundColor(Color.TRANSPARENT)
         with(webView.settings) {
             javaScriptEnabled = true
@@ -98,7 +125,40 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         loadApps()
+        applyRefreshRate()
         webView.evaluateJavascript("window.onResumed && window.onResumed()", null)
+        if (wasScreenOff) {
+            wasScreenOff = false
+            webView.evaluateJavascript("window.onWake && window.onWake()", null)
+        }
+    }
+
+    override fun onDestroy() {
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (_: Exception) {
+        }
+        super.onDestroy()
+    }
+
+    /** Ask the display for its highest refresh rate (90/120/144 Hz where the phone has it). */
+    @Suppress("DEPRECATION")
+    private fun applyRefreshRate() {
+        if (Build.VERSION.SDK_INT < 23) return
+        try {
+            val best = windowManager.defaultDisplay.supportedModes.maxByOrNull { it.refreshRate } ?: return
+            val lp = window.attributes
+            lp.preferredDisplayModeId = best.modeId
+            window.attributes = lp
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun hasUsageAccess(): Boolean {
+        val ops = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        @Suppress("DEPRECATION")
+        val mode = ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), packageName)
+        return mode == AppOpsManager.MODE_ALLOWED
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -327,6 +387,7 @@ class MainActivity : AppCompatActivity() {
             }
             o.put("torch", torchOn)
             o.put("a11y", ControlService.instance != null)
+            o.put("usage", hasUsageAccess())
             o.put("write", canWrite())
             o.put("silent", am.ringerMode != AudioManager.RINGER_MODE_NORMAL)
             if (Build.VERSION.SDK_INT >= 23) {
@@ -441,6 +502,132 @@ class MainActivity : AppCompatActivity() {
                     toast("Not available on this phone")
                 }
             }
+        }
+
+        /** Recently used apps (last 24h), newest first. Needs Usage access. */
+        @JavascriptInterface
+        fun getRecents(): String {
+            val out = JSONArray()
+            if (!hasUsageAccess()) return out.toString()
+            try {
+                val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+                val now = System.currentTimeMillis()
+                val ev = usm.queryEvents(now - 24L * 3600L * 1000L, now)
+                val last = LinkedHashMap<String, Long>()
+                val e = UsageEvents.Event()
+                while (ev.hasNextEvent()) {
+                    ev.getNextEvent(e)
+                    if (e.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) last[e.packageName] = e.timeStamp
+                }
+                val known = apps.associateBy { it.pkg }
+                for ((pkg, _) in last.entries.sortedByDescending { it.value }) {
+                    val a = known[pkg] ?: continue
+                    out.put(JSONObject().put("name", a.name).put("pkg", pkg))
+                    if (out.length() >= 12) break
+                }
+            } catch (_: Exception) {
+            }
+            return out.toString()
+        }
+
+        @JavascriptInterface
+        fun requestUsageAccess() {
+            runOnUiThread {
+                toast("Find \"iOS 27 Launcher\" and allow usage access")
+                try {
+                    startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun listen() {
+            runOnUiThread {
+                try {
+                    speech.launch(
+                        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    )
+                } catch (_: Exception) {
+                    toast("Voice input isn't available on this phone")
+                }
+            }
+        }
+
+        /** Safe phone actions for the assistant: dial, sms, url, search, maps, alarm, timer. They open the app; you confirm. */
+        @JavascriptInterface
+        fun act(kind: String, a: String, b: String) {
+            runOnUiThread {
+                try {
+                    val intent = when (kind) {
+                        "dial" -> Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", a.replace(Regex("[^0-9+*#]"), ""), null))
+                        "sms" -> Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(a.replace(Regex("[^0-9+]"), ""))))
+                            .putExtra("sms_body", b)
+                        "url" -> Intent(Intent.ACTION_VIEW, Uri.parse(if (a.startsWith("http://") || a.startsWith("https://")) a else "https://$a"))
+                        "search" -> Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(a)))
+                        "maps" -> Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(a)))
+                        "alarm" -> {
+                            val hm = a.split(":")
+                            Intent(AlarmClock.ACTION_SET_ALARM)
+                                .putExtra(AlarmClock.EXTRA_HOUR, hm[0].toInt())
+                                .putExtra(AlarmClock.EXTRA_MINUTES, hm.getOrNull(1)?.toInt() ?: 0)
+                                .putExtra(AlarmClock.EXTRA_MESSAGE, b)
+                                .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                        }
+                        "timer" -> Intent(AlarmClock.ACTION_SET_TIMER)
+                            .putExtra(AlarmClock.EXTRA_LENGTH, a.toInt())
+                            .putExtra(AlarmClock.EXTRA_MESSAGE, b)
+                            .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                        else -> return@runOnUiThread
+                    }
+                    startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                    toast("Couldn't do that on this phone")
+                }
+            }
+        }
+
+        /** Smart mode: sends your request to the Anthropic API with YOUR key, and returns the reply via window.onAI. */
+        @JavascriptInterface
+        fun askAI(id: Int, key: String, model: String, system: String, messagesJson: String) {
+            Thread {
+                var text = ""
+                var err = ""
+                try {
+                    val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
+                    c.requestMethod = "POST"
+                    c.connectTimeout = 15000
+                    c.readTimeout = 60000
+                    c.setRequestProperty("x-api-key", key)
+                    c.setRequestProperty("anthropic-version", "2023-06-01")
+                    c.setRequestProperty("content-type", "application/json")
+                    c.doOutput = true
+                    val body = JSONObject()
+                        .put("model", model)
+                        .put("max_tokens", 1024)
+                        .put("system", system)
+                        .put("messages", JSONArray(messagesJson))
+                    c.outputStream.use { it.write(body.toString().toByteArray()) }
+                    val code = c.responseCode
+                    val stream = if (code in 200..299) c.inputStream else c.errorStream
+                    val raw = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                    if (code in 200..299) {
+                        text = JSONObject(raw).getJSONArray("content").getJSONObject(0).optString("text")
+                    } else {
+                        val msg = try {
+                            JSONObject(raw).getJSONObject("error").optString("message")
+                        } catch (_: Exception) {
+                            raw.take(200)
+                        }
+                        err = "HTTP $code: $msg"
+                    }
+                } catch (e: Exception) {
+                    err = e.message ?: "Network error"
+                }
+                val js = "window.onAI(" + id + "," + JSONObject.quote(text) + "," + JSONObject.quote(err) + ")"
+                runOnUiThread { webView.evaluateJavascript(js, null) }
+            }.start()
         }
     }
 }
