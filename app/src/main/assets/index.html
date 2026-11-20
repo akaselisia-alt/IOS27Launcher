@@ -165,16 +165,7 @@
   <!-- Assistant -->
   <div id="ai" class="sheet">
     <div class="done" id="aiDone">Done</div>
-    <div id="aiGear">&#9881;&#xFE0E;</div>
     <h2>Assistant</h2>
-    <div id="aiSet">
-      <div class="card">
-        <div class="row"><span>Smart mode</span><div class="sw" id="aiSmart"></div></div>
-        <div class="row"><span>API key</span><input id="aiKey" type="password" placeholder="sk-ant-..." autocomplete="off"></div>
-        <div class="row"><span>Model</span><input id="aiModel" type="text" autocomplete="off"></div>
-        <div class="small">Smart mode understands any request using Claude. It uses your own Anthropic API key, which stays on this phone and is sent only to api.anthropic.com. While it is on, what you type (and your installed app names) is sent to Anthropic. Off = built-in commands that work offline.</div>
-      </div>
-    </div>
     <div id="aiLog"></div>
     <div id="aiBar"><input id="aiIn" type="text" placeholder="Tell me what to do..." autocomplete="off"><button id="aiMic">&#127908;</button><button id="aiSend">&#8593;</button></div>
   </div>
@@ -681,11 +672,8 @@
   }
 
   /* ---------- Assistant ---------- */
-  var HELP = 'Try things like:\n• open WhatsApp\n• turn on the torch / turn off focus\n• brightness 40 / volume 70 / mute\n• play / next song\n• lock the screen / take a screenshot / power menu\n• call 0241234567 / text 0241234567 saying hello\n• set an alarm for 6:30 am / timer 10 minutes\n• search for pizza near me / directions to the airport\n• wallpaper dusk / icon size 60 / 5 columns\n• show recents / open control center\n\nFor anything else, turn on Smart mode with the gear icon.';
-  var aiCfg = loadAI();
-  function loadAI() { try { return Object.assign({ smart: false, key: '', model: 'claude-sonnet-5-5' }, JSON.parse(localStorage.getItem('ios27ai') || '{}')); } catch (e) { return { smart: false, key: '', model: 'claude-sonnet-5-5' }; } }
-  function saveAI() { try { localStorage.setItem('ios27ai', JSON.stringify(aiCfg)); } catch (e) {} }
-  var history = [], pending = {}, reqId = 0, introShown = false;
+  var HELP = 'Try things like:\n• open WhatsApp\n• turn on the torch / turn off focus\n• brightness 40 / volume 70 / mute\n• play / next song\n• lock the screen / take a screenshot / power menu\n• call 0241234567 / text 0241234567 saying hello\n• set an alarm for 6:30 am / timer 10 minutes\n• search for pizza near me / directions to the airport\n• wallpaper dusk / icon size 60 / 5 columns\n• show recents / open control center\n\u2022 what time is it / battery level\n\u2022 open the camera and turn on the torch (I can chain commands)\n\nI work fully offline. Nothing you say leaves your phone.';
+  var introShown = false;
 
   function bubble(text, who) {
     var b = document.createElement('div'); b.className = 'b ' + who; b.textContent = text;
@@ -693,16 +681,9 @@
   }
   function openAI() {
     closeAll();
-    if (!introShown) { introShown = true; bubble('Hi! Tell me what to do with your phone. Say "help" to see examples.', 'bot'); }
+    if (!introShown) { introShown = true; bubble('Hi! I run fully offline on your phone. Tell me what to do, or say "help" for examples.', 'bot'); }
     show(ai);
   }
-  $('aiGear').onclick = function () {
-    var s = $('aiSet'); s.classList.toggle('open');
-    sw($('aiSmart'), aiCfg.smart, function (v) { aiCfg.smart = v; saveAI(); });
-    $('aiKey').value = aiCfg.key; $('aiModel').value = aiCfg.model;
-    $('aiKey').onchange = function () { aiCfg.key = this.value.trim(); saveAI(); };
-    $('aiModel').onchange = function () { aiCfg.model = this.value.trim() || 'claude-sonnet-5-5'; saveAI(); };
-  };
   $('aiMic').onclick = function () { if (A) A.listen(); else msg('Voice works inside the launcher app'); };
   window.onSpeech = function (t) { $('aiIn').value = t; sendAI(); };
   $('aiSend').onclick = sendAI;
@@ -711,7 +692,7 @@
   function sendAI() {
     var inp = $('aiIn'), text = inp.value.trim(); if (!text) return;
     inp.value = ''; bubble(text, 'me');
-    if (aiCfg.smart && aiCfg.key) smart(text); else reply(local(text), text);
+    reply(local(text), text);
   }
 
   function reply(res, userText) {
@@ -725,37 +706,7 @@
     bubble((said && results ? said + '\n' + results : (said || results || 'Done.')), 'bot');
   }
 
-  function installedNames() { return getApps().slice(0, 160).map(function (a) { return a.name; }).join(', '); }
-  function systemPrompt() {
-    return 'You are the assistant built into an Android home-screen launcher. You control the phone by replying with ONLY a JSON object, no markdown, no code fences: {"say":"short friendly reply","actions":[...]}.\n' +
-      'Action objects use the field "do":\n' +
-      'open_app{name} | toggle{name:torch|dnd|silent|rotate,on:true|false} | brightness{percent} | volume{percent} | media{key:play|next|prev} | system{what:lock|screenshot|power|recents|notifications|quick} | shortcut{name:wifi|bt|data|air|display|location|hotspot|saver|nfc|settings|camera|calc|clock} | dial{number} | sms{number,text} | open_url{url} | web_search{query} | maps{query} | alarm{hour,minute,label} | timer{seconds,label} | show{what:control_center|app_library|customize|recents|lock_screen} | customize{setting:wallpaper|icon_size|columns|shape|labels|clock,value}\n' +
-      'Wallpapers: aurora, dusk, lagoon, bloom, graphite, system. Shapes: squircle, circle, square. icon_size is 40-64, columns is 4 or 5.\n' +
-      'Use several actions in order when needed. If a request cannot be done with these actions, say so briefly in "say" with an empty actions list. Calls and texts only open the dialer or message composer; the user confirms. Wi-Fi, Bluetooth, mobile data and airplane mode can only open their settings screens.\n' +
-      'Installed apps: ' + installedNames();
-  }
-
-  function smart(text) {
-    var wait = bubble('…', 'bot');
-    var id = ++reqId;
-    history.push({ role: 'user', content: text });
-    history = history.slice(-8);
-    pending[id] = function (txt, err) {
-      if (wait.parentNode) wait.parentNode.removeChild(wait);
-      if (err) { history.pop(); bubble('Smart mode error: ' + err + '\n(Using offline commands instead.)', 'bot'); reply(local(text), text); return; }
-      history.push({ role: 'assistant', content: txt });
-      var res = parseJSON(txt) || { say: txt, actions: [] };
-      reply(res, text);
-    };
-    if (!A) { pending[id]('', 'Not running inside the launcher app'); delete pending[id]; return; }
-    A.askAI(id, aiCfg.key, aiCfg.model, systemPrompt(), JSON.stringify(history));
-  }
-  window.onAI = function (id, text, err) { var f = pending[id]; if (f) { delete pending[id]; f(text, err); } };
-  function parseJSON(t) {
-    try { var a = t.indexOf('{'), b = t.lastIndexOf('}'); return JSON.parse(t.slice(a, b + 1)); } catch (e) { return null; }
-  }
-
-  /* --- action runners (used by both offline commands and Smart mode) --- */
+  /* --- action runners (run by the offline assistant) --- */
   function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim(); }
   function findApp(name) {
     var n = norm(name); if (!n) return null;
@@ -764,8 +715,24 @@
     for (i = 0; i < apps.length; i++) if (norm(apps[i].name).indexOf(n) === 0) return apps[i];
     for (i = 0; i < apps.length; i++) if (norm(apps[i].name).indexOf(n) >= 0) return apps[i];
     for (i = 0; i < apps.length; i++) if (n.indexOf(norm(apps[i].name)) >= 0 && norm(apps[i].name).length > 3) return apps[i];
+    var al = ALIAS[n];
+    if (al) for (var k = 0; k < al.length; k++) { var hit = findAppExact(apps, al[k]); if (hit) return hit; }
+    if (n.length >= 4) {                                   // typo tolerance, e.g. "whatsap", "instagam"
+      var best = null, bd = 99, lim = Math.max(1, Math.floor(n.length / 4));
+      for (i = 0; i < apps.length; i++) { var d = lev(n, norm(apps[i].name)); if (d < bd) { bd = d; best = apps[i]; } }
+      if (best && bd <= lim) return best;
+    }
     return null;
   }
+  function findAppExact(apps, n) { for (var i = 0; i < apps.length; i++) if (norm(apps[i].name).indexOf(n) >= 0) return apps[i]; return null; }
+  function lev(a, b) {
+    var m = a.length, n = b.length, d = [], i, j;
+    for (i = 0; i <= m; i++) { d[i] = [i]; }
+    for (j = 1; j <= n; j++) d[0][j] = j;
+    for (i = 1; i <= m; i++) for (j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[m][n];
+  }
+  var ALIAS = { insta: ['instagram'], ig: ['instagram'], yt: ['youtube'], fb: ['facebook'], 'whats app': ['whatsapp'], wa: ['whatsapp'], gallery: ['photos', 'gallery'], pictures: ['photos', 'gallery'], texts: ['messages', 'messaging'], sms: ['messages', 'messaging'], text: ['messages', 'messaging'], dialer: ['phone', 'dialer'], calls: ['phone', 'dialer'], browser: ['chrome', 'browser', 'internet'], web: ['chrome', 'browser', 'internet'], mail: ['gmail', 'mail', 'email'], email: ['gmail', 'mail', 'email'], music: ['spotify', 'music', 'youtube music'], maps: ['maps'], notes: ['notes', 'keep'], store: ['play store'], 'app store': ['play store'], playstore: ['play store'], files: ['files', 'my files'], tiktok: ['tiktok'], twitter: ['x', 'twitter'], 'file manager': ['files', 'my files'] };
   function needA() { if (!A) throw new Error('only works inside the launcher app'); }
   function pct(v) { v = Math.round(Number(v)); if (isNaN(v)) throw new Error('I need a number'); return Math.max(0, Math.min(100, v)); }
 
@@ -776,6 +743,11 @@
       var cur = !!readStates()[key];
       if (want === undefined || cur !== !!want) A.toggle(key);
       return (key === 'dnd' ? 'Focus' : key.charAt(0).toUpperCase() + key.slice(1)) + (want === false ? ' off.' : ' on.') + (key === 'rotate' || key === 'dnd' ? ' (Android may ask for permission the first time.)' : '');
+    },
+    closeall: function () { closeAll(); return ''; },
+    info: function (a) {
+      if (a.what === 'battery') { needA(); return 'Battery is at ' + A.getBattery() + '%.'; }
+      return '';
     },
     brightness: function (a) { needA(); var p = Math.max(1, pct(a.percent)); A.setBrightness(p); return 'Brightness ' + p + '%.'; },
     volume: function (a) { needA(); A.setVolume(pct(a.percent)); return 'Volume ' + pct(a.percent) + '%.'; },
@@ -841,11 +813,18 @@
     return { h: h, m: mi };
   }
 
-  function local(text) {
+  function local1(text) {
     var s = text.toLowerCase().trim().replace(/[.!?]+$/, '').replace(/^(hey |hi |ok |okay )?(assistant|siri|jarvis)[, ]*/, ''), m;
     s = s.replace(/^please\s+/, '').replace(/\s+please$/, '');
     if (!s) return { say: 'Yes?', actions: [] };
     if (/^(help|what can you do|commands)/.test(s)) return { say: HELP, actions: [] };
+    if (/^(hi|hello|hey|yo|good (morning|afternoon|evening))$/.test(s)) return { say: 'Hello! What should I do?', actions: [] };
+    if (/^(thanks|thank you|cheers)/.test(s)) return { say: 'Anytime.', actions: [] };
+    if (/^(who are you|what are you)/.test(s)) return { say: 'I\'m the assistant built into this launcher. I run fully offline on your phone.', actions: [] };
+    if (/(what('s| is)? the )?time( is it| now)?$/.test(s) && /time/.test(s) && s.split(' ').length <= 5) return { say: 'It\'s ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.', actions: [] };
+    if (/(what('s| is)? )?(the |today'?s? )?(date|day)( is it| today)?$/.test(s) && s.split(' ').length <= 5) return { say: new Date().toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '.', actions: [] };
+    if (/battery( level| percentage| left| status)?$|how much battery/.test(s) && !/saver|saving/.test(s)) return { actions: [{ do: 'info', what: 'battery' }] };
+    if (/^(go home|home|close|go back|dismiss|cancel)$/.test(s)) return { say: '', actions: [{ do: 'closeall' }] };
 
     if ((m = s.match(/^(?:turn|switch)\s+(on|off)\s+(?:the\s+)?(.+)$/)) || (m = s.match(/^(?:turn|switch)\s+(?:the\s+)?(.+?)\s+(on|off)$/)) && (m = [m[0], m[2], m[1]])) {
       var onoff = m[1] === 'on', nm = m[2].trim();
@@ -906,7 +885,20 @@
     if (SHORT[s]) return { actions: [{ do: 'shortcut', name: SHORT[s] }] };
     var direct = findApp(s);
     if (direct && s.split(' ').length <= 3) return { actions: [{ do: 'open_app', name: s }] };
-    return { say: 'I didn\'t get that. Say "help" for examples, or turn on Smart mode (gear icon) to ask for anything.', actions: [] };
+    return { say: 'I didn\'t get that. Say "help" to see what I understand.', actions: [] };
+  }
+
+
+  // Understands several commands in one sentence: "open camera and turn on the torch"
+  function known(r) { return r && r.actions && r.actions.length > 0; }
+  function local(text) {
+    var parts = text.split(/\s*(?:,|;|\band then\b|\bthen\b|\band\b|\bafter that\b)\s*/i).filter(function (p) { return p.trim(); });
+    if (parts.length > 1) {
+      var all = [], ok = true;
+      for (var i = 0; i < parts.length; i++) { var r = local1(parts[i]); if (!known(r)) { ok = false; break; } all = all.concat(r.actions); }
+      if (ok) return { say: '', actions: all };
+    }
+    return local1(text);
   }
 
   /* ---------- Gestures ---------- */

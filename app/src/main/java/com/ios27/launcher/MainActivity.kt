@@ -11,8 +11,6 @@ import android.content.IntentFilter
 import android.os.Process
 import android.speech.RecognizerIntent
 import android.view.View
-import java.net.HttpURLConnection
-import java.net.URL
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
@@ -588,46 +586,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        /** Smart mode: sends your request to the Anthropic API with YOUR key, and returns the reply via window.onAI. */
         @JavascriptInterface
-        fun askAI(id: Int, key: String, model: String, system: String, messagesJson: String) {
-            Thread {
-                var text = ""
-                var err = ""
-                try {
-                    val c = URL("https://api.anthropic.com/v1/messages").openConnection() as HttpURLConnection
-                    c.requestMethod = "POST"
-                    c.connectTimeout = 15000
-                    c.readTimeout = 60000
-                    c.setRequestProperty("x-api-key", key)
-                    c.setRequestProperty("anthropic-version", "2023-06-01")
-                    c.setRequestProperty("content-type", "application/json")
-                    c.doOutput = true
-                    val body = JSONObject()
-                        .put("model", model)
-                        .put("max_tokens", 1024)
-                        .put("system", system)
-                        .put("messages", JSONArray(messagesJson))
-                    c.outputStream.use { it.write(body.toString().toByteArray()) }
-                    val code = c.responseCode
-                    val stream = if (code in 200..299) c.inputStream else c.errorStream
-                    val raw = stream?.bufferedReader()?.use { it.readText() } ?: ""
-                    if (code in 200..299) {
-                        text = JSONObject(raw).getJSONArray("content").getJSONObject(0).optString("text")
-                    } else {
-                        val msg = try {
-                            JSONObject(raw).getJSONObject("error").optString("message")
-                        } catch (_: Exception) {
-                            raw.take(200)
-                        }
-                        err = "HTTP $code: $msg"
-                    }
-                } catch (e: Exception) {
-                    err = e.message ?: "Network error"
-                }
-                val js = "window.onAI(" + id + "," + JSONObject.quote(text) + "," + JSONObject.quote(err) + ")"
-                runOnUiThread { webView.evaluateJavascript(js, null) }
-            }.start()
+        fun getBattery(): Int {
+            val bm = getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+            return bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
         }
     }
 }
