@@ -2,93 +2,139 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Home</title>
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
   html, body { margin: 0; height: 100%; background: transparent; font-family: -apple-system, system-ui, Roboto, sans-serif; color: #fff; overflow: hidden; }
-  body { display: flex; flex-direction: column; background: linear-gradient(160deg, rgba(40,50,120,.55), rgba(10,10,30,.55)); }
-  #clock { text-align: center; padding: 36px 0 8px; text-shadow: 0 1px 6px rgba(0,0,0,.4); }
-  #time { font-size: 64px; font-weight: 300; letter-spacing: -2px; }
-  #date { font-size: 15px; opacity: .85; }
-  #pages { flex: 1; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  body { display: flex; flex-direction: column; background: linear-gradient(180deg, rgba(0,0,0,.28), rgba(0,0,0,.42)); }
+
+  #clock { text-align: center; padding: 14px 0 2px; text-shadow: 0 1px 6px rgba(0,0,0,.45); flex: none; }
+  #time { font-size: 52px; font-weight: 300; letter-spacing: -2px; line-height: 1.05; }
+  #date { font-size: 14px; opacity: .9; }
+
+  #pages { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; }
   #pages::-webkit-scrollbar { display: none; }
-  .page { flex: 0 0 100%; scroll-snap-align: start; display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: min-content; gap: 18px 4px; padding: 16px 12px; align-content: start; }
-  .app { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
-  .ico { width: 58px; height: 58px; border-radius: 14px; background: #5b6cff; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 600; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
-  .ico img { width: 100%; height: 100%; object-fit: cover; }
-  .app:active .ico { transform: scale(.92); }
-  .lbl { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
-  #dots { display: flex; justify-content: center; gap: 7px; padding: 6px 0; }
-  #dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.4); }
+  .page { flex: 0 0 100%; scroll-snap-align: start; display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: var(--cell); padding: 10px 6px 0; align-content: start; }
+
+  .app { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 5px; min-width: 0; }
+  .ico { width: var(--ico); height: var(--ico); border-radius: 22%; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; overflow: hidden; }
+  .ico img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .app:active .ico { transform: scale(.9); opacity: .85; }
+  .lbl { font-size: 10.5px; max-width: 100%; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+
+  #dots { display: flex; justify-content: center; gap: 6px; padding: 4px 0; flex: none; min-height: 14px; }
+  #dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.4); }
   #dots i.on { background: #fff; }
-  #dock { display: flex; justify-content: space-around; margin: 6px 12px 10px; padding: 12px 8px; border-radius: 28px; background: rgba(255,255,255,.22); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); min-height: 84px; }
+  #dock { display: flex; justify-content: space-around; align-items: center; margin: 2px 10px 6px; padding: 10px 6px; border-radius: 26px; background: rgba(255,255,255,.2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); flex: none; }
+  #dock .lbl { display: none; }
+
+  /* Pull-down gesture strip */
+  #grab { position: fixed; left: 0; right: 0; top: 0; height: 46px; z-index: 5; }
+
+  /* Control Center */
+  #cc { position: fixed; inset: 0; z-index: 10; display: none; background: rgba(0,0,0,.45); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); padding: 18px 16px; overflow-y: auto; }
+  #cc.show { display: block; animation: drop .22s ease-out; }
+  @keyframes drop { from { transform: translateY(-30px); opacity: 0; } to { transform: none; opacity: 1; } }
+  #cc h2 { margin: 4px 0 14px; font-size: 15px; font-weight: 600; opacity: .85; text-align: center; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .tile { aspect-ratio: 1; border-radius: 22px; background: rgba(255,255,255,.18); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 11px; }
+  .tile svg { width: 26px; height: 26px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .tile.on { background: #fff; color: #111; }
+  .tile.on svg { stroke: #111; }
+  .tile:active { transform: scale(.95); }
+  .wide { grid-column: span 4; border-radius: 22px; background: rgba(255,255,255,.18); padding: 14px 16px; display: flex; align-items: center; gap: 12px; font-size: 12px; }
+  .wide input { flex: 1; accent-color: #fff; }
+  #ccClose { text-align: center; opacity: .7; font-size: 12px; margin-top: 18px; padding: 10px; }
 </style>
 </head>
 <body>
+  <div id="grab"></div>
   <div id="clock"><div id="time"></div><div id="date"></div></div>
   <div id="pages"></div>
   <div id="dots"></div>
   <div id="dock"></div>
 
+  <div id="cc">
+    <h2>Control Center</h2>
+    <div class="grid">
+      <div class="tile" data-a="wifi"><svg viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r=".8"/></svg>Wi‑Fi</div>
+      <div class="tile" data-a="bt"><svg viewBox="0 0 24 24"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg>Bluetooth</div>
+      <div class="tile" data-a="air"><svg viewBox="0 0 24 24"><path d="M21 15l-8-4V5a1 1 0 0 0-2 0v6l-8 4v2l8-2v4l-2 1v1l3-.5 3 .5v-1l-2-1v-4l8 2z"/></svg>Airplane</div>
+      <div class="tile" data-a="display"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Display</div>
+      <div class="tile" data-a="torch"><svg viewBox="0 0 24 24"><path d="M9 2h6l-1 6h-4zM10 8v5l-2 2v7h8v-7l-2-2V8"/></svg>Torch</div>
+      <div class="tile" data-a="camera"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Camera</div>
+      <div class="tile" data-a="calc"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M12 12h2M8 16h2M12 16h2"/></svg>Calculator</div>
+      <div class="tile" data-a="clock"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Clock</div>
+      <div class="wide"><span>Volume</span><input id="vol" type="range" min="0" max="100" value="50"></div>
+      <div class="tile" data-a="notif" style="grid-column: span 4; aspect-ratio: auto; padding: 14px;">Show notifications</div>
+    </div>
+    <div id="ccClose">Swipe up or tap here to close</div>
+  </div>
+
 <script>
 (function () {
-  var PER_PAGE = 20;
-  var DOCK_HINTS = [/dialer/, /messag/, /camera/, /chrome|browser/];
+  var A = window.Android;
+  var $ = function (id) { return document.getElementById(id); };
 
   function tick() {
     var d = new Date();
-    document.getElementById('time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/ ?[AP]M/i, '');
-    document.getElementById('date').textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    $('time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/ ?[AP]M/i, '');
+    $('date').textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   }
   tick(); setInterval(tick, 20000);
 
   function getApps() {
-    if (window.Android) { try { return JSON.parse(Android.getApps()); } catch (e) {} }
-    // Browser preview fallback
+    if (A) { try { return JSON.parse(A.getApps()); } catch (e) {} }
     return ['Phone','Messages','Camera','Browser','Maps','Mail','Photos','Music','Clock','Notes','Files','Settings']
       .map(function (n) { return { name: n, pkg: 'demo.' + n.toLowerCase() }; });
   }
 
   function tile(app) {
-    var el = document.createElement('div');
-    el.className = 'app';
-    var ico = document.createElement('div');
-    ico.className = 'ico';
-    ico.textContent = app.name.charAt(0).toUpperCase();
-    var lbl = document.createElement('div');
-    lbl.className = 'lbl';
-    lbl.textContent = app.name;
+    var el = document.createElement('div'); el.className = 'app';
+    var ico = document.createElement('div'); ico.className = 'ico'; ico.textContent = app.name.charAt(0).toUpperCase();
+    var lbl = document.createElement('div'); lbl.className = 'lbl'; lbl.textContent = app.name;
     el.appendChild(ico); el.appendChild(lbl);
-    el.addEventListener('click', function () { if (window.Android) Android.openApp(app.pkg); });
-    // Load the real icon without blocking the first paint
-    if (window.Android) setTimeout(function () {
-      var src = Android.getIcon(app.pkg);
-      if (src) { var img = new Image(); img.src = src; ico.textContent = ''; ico.appendChild(img); }
+    el.addEventListener('click', function () { if (A) A.openApp(app.pkg); });
+    if (A) setTimeout(function () {
+      var src = A.getIcon(app.pkg);
+      if (src) { var img = new Image(); img.src = src; ico.textContent = ''; ico.style.background = 'transparent'; ico.appendChild(img); }
     }, 0);
     return el;
   }
 
+  // Size the grid to the screen so every page fits with no clipping
+  function layout() {
+    var pages = $('pages');
+    var w = pages.clientWidth || window.innerWidth;
+    var h = pages.clientHeight || 400;
+    var ico = Math.max(44, Math.min(54, Math.floor(w / 4 - 22)));
+    var cell = ico + 30;
+    var rows = Math.max(3, Math.floor((h - 12) / cell));
+    var root = document.documentElement.style;
+    root.setProperty('--ico', ico + 'px');
+    root.setProperty('--cell', cell + 'px');
+    return rows * 4;
+  }
+
+  var lastPer = 0;
   function render() {
+    var per = layout(); lastPer = per;
     var apps = getApps();
     var dockApps = [];
-    DOCK_HINTS.forEach(function (re) {
+    [/dialer/, /messag/, /camera/, /chrome|browser/].forEach(function (re) {
       var i = apps.findIndex(function (a) { return re.test(a.pkg.toLowerCase()); });
       if (i >= 0) dockApps.push(apps.splice(i, 1)[0]);
     });
-
-    var dock = document.getElementById('dock');
-    dock.innerHTML = '';
+    var dock = $('dock'); dock.innerHTML = '';
     dockApps.forEach(function (a) { dock.appendChild(tile(a)); });
-    dock.querySelectorAll('.lbl').forEach(function (l) { l.style.display = 'none'; });
+    if (!dockApps.length) dock.style.display = 'none'; else dock.style.display = 'flex';
 
-    var pages = document.getElementById('pages');
-    var dots = document.getElementById('dots');
+    var pages = $('pages'), dots = $('dots');
     pages.innerHTML = ''; dots.innerHTML = '';
-    for (var i = 0; i < apps.length; i += PER_PAGE) {
-      var p = document.createElement('div');
-      p.className = 'page';
-      apps.slice(i, i + PER_PAGE).forEach(function (a) { p.appendChild(tile(a)); });
+    for (var i = 0; i < apps.length; i += per) {
+      var p = document.createElement('div'); p.className = 'page';
+      apps.slice(i, i + per).forEach(function (a) { p.appendChild(tile(a)); });
       pages.appendChild(p);
       dots.appendChild(document.createElement('i'));
     }
@@ -96,16 +142,49 @@
   }
 
   function updateDots() {
-    var pages = document.getElementById('pages');
+    var pages = $('pages');
     var idx = Math.round(pages.scrollLeft / Math.max(pages.clientWidth, 1));
     document.querySelectorAll('#dots i').forEach(function (d, i) { d.classList.toggle('on', i === idx); });
   }
-  document.getElementById('pages').addEventListener('scroll', updateDots);
+  $('pages').addEventListener('scroll', updateDots);
+  window.addEventListener('resize', function () { if (layout() !== lastPer) render(); });
 
-  // Called by the launcher
-  window.onHome = function () { document.getElementById('pages').scrollTo({ left: 0, behavior: 'smooth' }); };
+  // ---- Control Center + notification shade ----
+  var cc = $('cc');
+  function openCC() { cc.classList.add('show'); if (A) { try { $('vol').value = A.getVolume(); } catch (e) {} } }
+  function closeCC() { cc.classList.remove('show'); }
+  $('ccClose').addEventListener('click', closeCC);
+
+  var torch = false;
+  cc.addEventListener('click', function (e) {
+    var t = e.target.closest('.tile'); if (!t || !A) return;
+    var a = t.getAttribute('data-a');
+    if (a === 'torch') { torch = !torch; A.setTorch(torch); t.classList.toggle('on', torch); return; }
+    if (a === 'notif') { closeCC(); A.openNotifications(); return; }
+    closeCC(); A.shortcut(a);
+  });
+  $('vol').addEventListener('input', function (e) { if (A) A.setVolume(parseInt(e.target.value, 10)); });
+
+  // Swipe down from the top strip: left side = notifications, right side = Control Center
+  var sy = null, sx = 0;
+  var grab = $('grab');
+  grab.addEventListener('touchstart', function (e) { sy = e.touches[0].clientY; sx = e.touches[0].clientX; }, { passive: true });
+  grab.addEventListener('touchend', function (e) {
+    if (sy === null) return;
+    var dy = e.changedTouches[0].clientY - sy;
+    if (dy > 40) {
+      if (sx > window.innerWidth * 0.55) openCC();
+      else if (A) A.openNotifications(); else openCC();
+    }
+    sy = null;
+  });
+  // Swipe up to close Control Center
+  var cy = null;
+  cc.addEventListener('touchstart', function (e) { cy = e.touches[0].clientY; }, { passive: true });
+  cc.addEventListener('touchend', function (e) { if (cy !== null && cy - e.changedTouches[0].clientY > 60) closeCC(); cy = null; });
+
+  window.onHome = function () { closeCC(); $('pages').scrollTo({ left: 0, behavior: 'smooth' }); };
   window.onAppsChanged = render;
-
   render();
 })();
 </script>

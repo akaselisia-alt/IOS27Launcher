@@ -1,7 +1,16 @@
 package com.ios27.launcher
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
+import android.os.Build
+import android.provider.AlarmClock
+import android.provider.MediaStore
+import android.provider.Settings
+import androidx.core.view.WindowCompat
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -46,6 +55,14 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // Keep the real status bar and nav bar visible: white icons on a light dark scrim
+        window.statusBarColor = Color.parseColor("#55000000")
+        window.navigationBarColor = Color.parseColor("#55000000")
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
 
         webView = findViewById(R.id.webView)
         drawer = findViewById(R.id.appDrawer)
@@ -231,6 +248,65 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun openApp(pkg: String) {
             runOnUiThread { launchPackage(pkg, pkg) }
+        }
+
+        @JavascriptInterface
+        fun openNotifications() { runOnUiThread { expandPanel("expandNotificationsPanel") } }
+
+        @JavascriptInterface
+        fun setTorch(on: Boolean) {
+            try {
+                val cm = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                val id = cm.cameraIdList.firstOrNull {
+                    cm.getCameraCharacteristics(it).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+                } ?: return
+                cm.setTorchMode(id, on)
+            } catch (_: Exception) {
+                runOnUiThread { Toast.makeText(this@MainActivity, "Torch not available", Toast.LENGTH_SHORT).show() }
+            }
+        }
+
+        @JavascriptInterface
+        fun getVolume(): Int {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            return am.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / max
+        }
+
+        @JavascriptInterface
+        fun setVolume(percent: Int) {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, percent.coerceIn(0, 100) * max / 100, 0)
+        }
+
+        @JavascriptInterface
+        fun shortcut(name: String) {
+            runOnUiThread {
+                val intent = when (name) {
+                    "wifi" -> if (Build.VERSION.SDK_INT >= 29) Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY) else Intent(Settings.ACTION_WIFI_SETTINGS)
+                    "bt" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                    "air" -> Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)
+                    "display" -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
+                    "camera" -> Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+                    "calc" -> Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALCULATOR)
+                    "clock" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
+                    else -> return@runOnUiThread
+                }
+                try { startActivity(intent) } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, "Not available on this phone", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    @SuppressLint("WrongConstant")
+    private fun expandPanel(method: String) {
+        try {
+            val sb = getSystemService("statusbar")
+            Class.forName("android.app.StatusBarManager").getMethod(method).invoke(sb)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Swipe down from the very top of the screen", Toast.LENGTH_SHORT).show()
         }
     }
 }

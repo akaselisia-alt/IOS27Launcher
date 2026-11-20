@@ -22,7 +22,7 @@
             android:layout_height="match_parent"
             android:background="@drawable/bg_drawer"
             android:clipToPadding="false"
-            android:padding="12dp"
+            android:padding="8dp"
             android:visibility="gone" />
     </FrameLayout>
 
@@ -31,12 +31,12 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="12dp">
+        android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="4dp" android:paddingBottom="8dp">
 
         <EditText
             android:id="@+id/searchBar"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="40dp"
             android:layout_weight="1"
             android:background="@drawable/bg_search"
             android:hint="Search apps"
