@@ -11,8 +11,9 @@ android {
         applicationId = "com.ios27.launcher"
         minSdk = 21
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        val run = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toIntOrNull() ?: 1
+        versionCode = run
+        versionName = "1.0.$run"
         // Your account server, baked into the APK. Set the LAUNCHER_SERVER repository variable (https://...).
         val server = (System.getenv("LAUNCHER_SERVER") ?: "").trim().trimEnd('/')
         require(server.isEmpty() || server.startsWith("https://")) { "LAUNCHER_SERVER must start with https://" }

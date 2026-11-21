@@ -810,6 +810,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun appVersion(): String = BuildConfig.VERSION_NAME
+
+        @JavascriptInterface
         fun acctSignOut() {
             accountPrefs().edit().remove("token").remove("id").apply()
         }

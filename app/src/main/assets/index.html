@@ -217,6 +217,7 @@
       <div class="row"><span>Screen refresh rate</span><span id="stHz" style="opacity:.75;font-size:13px"></span></div>
     </div>
 
+    <div class="small" id="stVer" style="text-align:center;margin-top:14px"></div>
     <div class="sec">Privacy</div>
     <div class="card"><div class="small" style="padding:12px 14px">The launcher and the assistant work fully offline. The internet is used only when you sign in to your own server: your password is sent to it over HTTPS and the server keeps only a salted hash. The sign-in token stays inside the app.</div></div>
   </div>
@@ -1258,6 +1259,7 @@
     $('stHz').textContent = A ? (A.getHz() + ' Hz (max for this screen)') : '—';
     $('stServerCard').style.display = acct.builtIn ? 'none' : '';
     $('stServerSec').style.display = acct.builtIn ? 'none' : '';
+    $('stVer').textContent = 'Launcher build ' + (A && A.appVersion ? A.appVersion() : 'preview');
     show(stg);
   }
   function saveServer() {
