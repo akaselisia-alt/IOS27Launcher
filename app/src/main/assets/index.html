@@ -468,7 +468,7 @@
   tick(); setInterval(tick, 5000);
 
   /* ---------- Sheets (spring in/out) ---------- */
-  var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), st = $('st'), ls = $('ls');
+  var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), stg = $('st'), ls = $('ls');
   function isOpen(el) { return el.classList.contains('in'); }
   function show(el) { el.classList.add('show'); void el.offsetWidth; el.classList.add('in'); }
   function hide(el) {
@@ -477,11 +477,11 @@
     setTimeout(function () {
       if (el.classList.contains('in')) return;
       el.classList.remove('show');
-      if (el === st) $('stAccount').innerHTML = '';   // don't leave typed passwords in the page
+      if (el === stg) $('stAccount').innerHTML = '';   // don't leave typed passwords in the page
     }, 300);
   }
-  function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai) || isOpen(st); }
-  function closeAll() { [lib, cz, cc, rc, ai, st].forEach(hide); }
+  function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai) || isOpen(stg); }
+  function closeAll() { [lib, cz, cc, rc, ai, stg].forEach(hide); }
   ['libDone', 'czDone', 'rcDone', 'aiDone', 'stDone'].forEach(function (id) { $(id).addEventListener('click', closeAll); });
 
   function openLib() {
@@ -1126,7 +1126,7 @@
 
   function acctRefresh() {
     if (A) { try { acct = JSON.parse(A.acctState()); } catch (e) {} }
-    if (isOpen(st)) renderAccount();
+    if (isOpen(stg)) renderAccount();
   }
 
   function renderAccount() {
@@ -1214,7 +1214,7 @@
     $('stServerMsg').textContent = '';
     sw($('stLock'), cfg.lockscreen, function (v) { cfg.lockscreen = v; save(); });
     $('stHz').textContent = A ? (A.getHz() + ' Hz (max for this screen)') : '—';
-    show(st);
+    show(stg);
   }
   function saveServer() {
     var e = A ? A.acctSetServer($('stServer').value) : 'Only works inside the launcher app';
