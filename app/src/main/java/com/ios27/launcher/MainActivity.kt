@@ -7,9 +7,6 @@ import android.app.NotificationManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
-import android.content.ComponentCallbacks2
-import android.os.Handler
-import android.os.Looper
 import android.content.IntentFilter
 import android.os.Process
 import android.speech.RecognizerIntent
@@ -66,15 +63,6 @@ class MainActivity : AppCompatActivity() {
     private var torchOn = false
     private var wasScreenOff = false
     private val llmExecutor = Executors.newSingleThreadExecutor()
-    private val idleHandler = Handler(Looper.getMainLooper())
-    private val idleRelease = Runnable {
-        llmExecutor.execute {
-            try {
-                LocalLlm.release()
-            } catch (_: Throwable) {
-            }
-        }
-    }
 
     private fun modelFile() = File(filesDir, "model.litertlm")
 
@@ -114,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView = findViewById(R.id.webView)
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         ContextCompat.registerReceiver(
             this, screenReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED
         )
@@ -123,9 +112,6 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true
             allowFileAccess = false      // android_asset/ is still readable
             allowContentAccess = false
-            setSupportZoom(false)
-            setGeolocationEnabled(false)
-            javaScriptCanOpenWindowsAutomatically = false
         }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -149,22 +135,8 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    override fun onPause() {
-        webView.onPause()
-        super.onPause()
-    }
-
-    override fun onTrimMemory(level: Int) {
-        super.onTrimMemory(level)
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
-            iconCache.clear()
-            webView.evaluateJavascript("window.onTrim && window.onTrim()", null)
-        }
-    }
-
     override fun onResume() {
         super.onResume()
-        webView.onResume()
         loadApps()
         applyRefreshRate()
         webView.evaluateJavascript("window.onResumed && window.onResumed()", null)
@@ -284,12 +256,12 @@ class MainActivity : AppCompatActivity() {
                 .distinctBy { it.activityInfo.packageName }
                 .map {
                     val pkg = it.activityInfo.packageName
-                    val custom = customRes(pkg) != null
-                    AppInfo(it.loadLabel(pm).toString(), pkg, custom)
+                    val custom = customIcon(pkg)
+                    AppInfo(it.loadLabel(pm).toString(), pkg, custom ?: it.loadIcon(pm), custom != null)
                 }
                 .sortedBy { it.name.lowercase() }
             runOnUiThread {
-                if (!isFinishing && !isDestroyed && list.map { it.pkg } != apps.map { it.pkg }) {
+                if (!isFinishing && !isDestroyed) {
                     apps = list
                     iconCache.clear()
                     webView.evaluateJavascript("window.onAppsChanged && window.onAppsChanged()", null)
@@ -299,7 +271,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // Original icon pack (no third-party logos). Unlisted apps keep their own icon.
-    private fun customRes(pkg: String): Int? {
+    private fun customIcon(pkg: String): Drawable? {
         val res = when (pkg) {
             "com.whatsapp", "com.whatsapp.w4b" -> R.drawable.ic_chat
             "com.zhiliaoapp.musically", "com.ss.android.ugc.trill" -> R.drawable.ic_clips
@@ -319,17 +291,15 @@ class MainActivity : AppCompatActivity() {
             "com.android.calculator2" -> R.drawable.ic_calculator
             else -> return null
         }
-        return res
+        return ContextCompat.getDrawable(this, res)
     }
-
-    private fun customIcon(pkg: String): Drawable? = customRes(pkg)?.let { ContextCompat.getDrawable(this, it) }
 
     private fun loadWallpaper(uri: Uri) {
         try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
             var sample = 1
-            while (bounds.outWidth / sample > 1200 || bounds.outHeight / sample > 2100) sample *= 2
+            while (bounds.outWidth / sample > 1400 || bounds.outHeight / sample > 2400) sample *= 2
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             val bmp = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
             if (bmp == null) {
@@ -337,7 +307,7 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             val out = ByteArrayOutputStream()
-            bmp.compress(Bitmap.CompressFormat.JPEG, 75, out)
+            bmp.compress(Bitmap.CompressFormat.JPEG, 80, out)
             val data = "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
             runOnUiThread { webView.evaluateJavascript("window.onWallpaper(" + JSONObject.quote(data) + ")", null) }
         } catch (_: Exception) {
@@ -415,10 +385,10 @@ class MainActivity : AppCompatActivity() {
             iconCache[pkg]?.let { return it }
             val app = apps.firstOrNull { it.pkg == pkg } ?: return ""
             return try {
-                val size = 96
+                val size = 120
                 val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
                 val c = Canvas(bmp)
-                val d = customIcon(pkg) ?: packageManager.getApplicationIcon(pkg)
+                val d = app.icon.constantState?.newDrawable()?.mutate() ?: app.icon
                 if (Build.VERSION.SDK_INT >= 26 && d is AdaptiveIconDrawable) {
                     // Draw both layers edge-to-edge so the icon fills the glass tile (the launcher applies the shape)
                     val k = size / 72f
@@ -748,7 +718,6 @@ class MainActivity : AppCompatActivity() {
         /** Runs the imported model on the phone (no internet) and returns the text through window.onLocal. */
         @JavascriptInterface
         fun llmAsk(id: Int, prompt: String) {
-            idleHandler.removeCallbacks(idleRelease)
             llmExecutor.execute {
                 var text = ""
                 var err = ""
@@ -757,7 +726,6 @@ class MainActivity : AppCompatActivity() {
                 } catch (t: Throwable) {
                     err = t.message ?: t.javaClass.simpleName
                 }
-                idleHandler.postDelayed(idleRelease, 45_000L)   // free the model's RAM 45 s after the last answer
                 val js = "window.onLocal(" + id + "," + JSONObject.quote(text) + "," + JSONObject.quote(err) + ")"
                 runOnUiThread { webView.evaluateJavascript(js, null) }
             }
