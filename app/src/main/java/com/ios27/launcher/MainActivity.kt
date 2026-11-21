@@ -182,6 +182,53 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Copies the model file you pick into the app's private storage (llama-style models are large, so this shows progress). */
+    private fun importModel(uri: Uri) {
+        fun js(code: String) = runOnUiThread { webView.evaluateJavascript(code, null) }
+        val tmp = File(filesDir, "model.tmp")
+        try {
+            var name = "model.litertlm"
+            var total = 0L
+            contentResolver.query(uri, null, null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    val ni = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (ni >= 0) name = c.getString(ni) ?: name
+                    val si = c.getColumnIndex(OpenableColumns.SIZE)
+                    if (si >= 0 && !c.isNull(si)) total = c.getLong(si)
+                }
+            }
+            var done = 0L
+            var lastPct = -1
+            contentResolver.openInputStream(uri)?.use { input ->
+                tmp.outputStream().use { out ->
+                    val buf = ByteArray(1 shl 20)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        if (total > 0) {
+                            val pct = (done * 100 / total).toInt()
+                            if (pct != lastPct) {
+                                lastPct = pct
+                                js("window.onModelProgress($pct)")
+                            }
+                        }
+                    }
+                }
+            } ?: throw IllegalStateException("Couldn't open that file")
+            LocalLlm.release()
+            val dest = modelFile()
+            if (dest.exists()) dest.delete()
+            if (!tmp.renameTo(dest)) throw IllegalStateException("Couldn't save the model")
+            getSharedPreferences("llm", MODE_PRIVATE).edit().putString("name", name).apply()
+            js("window.onModelReady(" + JSONObject.quote(name) + ")")
+        } catch (t: Throwable) {
+            tmp.delete()
+            js("window.onModelError(" + JSONObject.quote(t.message ?: "Import failed") + ")")
+        }
+    }
+
     private fun hasUsageAccess(): Boolean {
         val ops = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         @Suppress("DEPRECATION")
