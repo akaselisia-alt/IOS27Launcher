@@ -213,6 +213,7 @@
     <div class="card">
       <div class="row"><span>Show clock</span><div class="sw" id="czClock"></div></div>
       <div class="row"><span>iOS lock screen after unlock</span><div class="sw" id="czLock"></div></div>
+      <div class="row"><span>Screen refresh rate</span><span id="czHz" style="opacity:.75;font-size:13px"></span></div>
     </div>
     <div class="small">Android's own lock screen can't be replaced, so this one appears right after you unlock the phone. It is for looks, not security.</div>
 
@@ -531,6 +532,7 @@
     sw($('czLabels'), cfg.labels, function (v) { cfg.labels = v; changed(); });
     sw($('czClock'), cfg.clock, function (v) { cfg.clock = v; changed(); });
     sw($('czLock'), cfg.lockscreen, function (v) { cfg.lockscreen = v; save(); });
+    $('czHz').textContent = A ? (A.getHz() + ' Hz (max for this screen)') : '\u2014';
     $('czReset').onclick = function () {
       cfg = Object.assign({}, DEF, { hidden: [], dock: [] }); save();
       try { localStorage.removeItem('ios27wall'); } catch (e) {}
