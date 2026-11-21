@@ -146,6 +146,13 @@ function authed(req) {
   if (!t || t.exp < Date.now() || !users.has(t.id)) throw fail(401, 'Please sign in again');
   return { id: t.id, user: users.get(t.id), key };
 }
+// Recovery code: shown once at sign-up. It is the only way to reset a forgotten password (there is no email).
+function newRecoveryCode() {
+  const raw = crypto.randomBytes(10).toString('hex').toUpperCase(); // 80 bits
+  return raw.match(/.{1,5}/g).join('-');
+}
+const normCode = (c) => String(c || '').toUpperCase().replace(/[^0-9A-F]/g, '');
+const codeHash = (id, c) => sha('rc:' + id + ':' + normCode(c));
 function validId(v) { return typeof v === 'string' && ID_RE.test(v.trim().toLowerCase()); }
 function validPw(v) { return typeof v === 'string' && v.length >= 8 && v.length <= 128; }
 function dropTokens(id, exceptKey) {
@@ -157,6 +164,15 @@ async function route(req, res) {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   const ip = clientIp(req);
+
+  if (req.method === 'GET' && (p === '/' || p === '/privacy')) {
+    const page = p === '/'
+      ? '<h1>iOS 27 Launcher account server</h1><p>This server stores launcher accounts. Open the launcher app to sign in.</p><p><a href="/privacy">Privacy</a></p>'
+      : '<h1>Privacy</h1><p>We store: your launcher ID, a salted hash of your password (never the password), a hash of your recovery code, and your launcher settings (wallpaper choice, grid, icon style, dock, hidden apps). We store no email, phone number, location, contacts, photos or app usage. Delete your account any time in Launcher Settings; it removes all of this immediately.</p><p><a href="/">Back</a></p>';
+    const body = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>iOS 27 Launcher</title><body style="font:16px system-ui;max-width:560px;margin:40px auto;padding:0 16px">' + page;
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'Strict-Transport-Security': 'max-age=15552000' });
+    return res.end(body);
+  }
 
   if (req.method === 'GET' && p === '/health') return send(res, 200, { ok: true });
 
@@ -171,10 +187,11 @@ async function route(req, res) {
     const salt = crypto.randomBytes(16).toString('hex');
     const hash = (await kdf(b.password, salt)).toString('hex');
     if (users.has(id)) throw fail(409, 'That ID is taken'); // re-check after the slow hash
-    users.set(id, { salt, hash, createdAt: Date.now(), settings: null, updatedAt: 0 });
+    const recovery = newRecoveryCode();
+    users.set(id, { salt, hash, createdAt: Date.now(), settings: null, updatedAt: 0, rc: codeHash(id, recovery) });
     const token = issueToken(id);
     save();
-    return send(res, 201, { id, token });
+    return send(res, 201, { id, token, recovery });
   }
 
   if (req.method === 'POST' && p === '/api/login') {
@@ -198,6 +215,34 @@ async function route(req, res) {
     return send(res, 200, { id, token });
   }
 
+  if (req.method === 'POST' && p === '/api/recover') {
+    if (limited('rec:' + ip, 10, 3600 * 1000)) throw fail(429, 'Too many attempts, try again later');
+    const b = await readBody(req);
+    if (typeof b.id !== 'string' || typeof b.recovery !== 'string' || !validPw(b.newPassword)) throw fail(400, 'Enter your ID, recovery code and a new password (8+ characters)');
+    const id = b.id.trim().toLowerCase();
+    const f = fails.get('rec:' + id) || { n: 0, until: 0 };
+    if (f.until > Date.now()) throw fail(429, 'Too many wrong codes. Try again in 15 minutes');
+    const user = users.get(id);
+    const given = Buffer.from(codeHash(id, b.recovery), 'hex');
+    const want = Buffer.from(user && user.rc ? user.rc : '00'.repeat(32), 'hex');
+    const ok = !!(user && user.rc) && want.length === given.length && crypto.timingSafeEqual(want, given);
+    if (!ok) {
+      f.n++;
+      if (f.n >= 5) { f.n = 0; f.until = Date.now() + 15 * 60 * 1000; }
+      fails.set('rec:' + id, f);
+      throw fail(403, 'Wrong ID or recovery code');
+    }
+    fails.delete('rec:' + id); fails.delete(id);
+    const recovery = newRecoveryCode();               // the old code is now used up
+    user.salt = crypto.randomBytes(16).toString('hex');
+    user.hash = (await kdf(b.newPassword, user.salt)).toString('hex');
+    user.rc = codeHash(id, recovery);
+    dropTokens(id, null);                              // sign out everywhere
+    const token = issueToken(id);
+    save();
+    return send(res, 200, { id, token, recovery });
+  }
+
   // everything below needs a signed-in session
   if (p.startsWith('/api/')) {
     const a = authed(req);
@@ -217,6 +262,15 @@ async function route(req, res) {
       a.user.updatedAt = Date.now();
       save();
       return send(res, 200, { updatedAt: a.user.updatedAt });
+    }
+
+    if (req.method === 'POST' && p === '/api/recovery-code') {
+      const b = await readBody(req);
+      if (typeof b.password !== 'string' || !(await passwordOk(a.user, b.password))) throw fail(403, 'Password is wrong');
+      const recovery = newRecoveryCode();
+      a.user.rc = codeHash(a.id, recovery);
+      save();
+      return send(res, 200, { recovery });
     }
 
     if (req.method === 'POST' && p === '/api/logout') {

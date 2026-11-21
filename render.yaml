@@ -1,0 +1,14 @@
+# One-click deploy on Render: dashboard -> New -> Blueprint -> pick this repo.
+# A persistent disk is REQUIRED (accounts live on it) and needs a paid instance.
+services:
+  - type: web
+    name: ios27-launcher-server
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    plan: starter
+    healthCheckPath: /health
+    disk:
+      name: accounts
+      mountPath: /data
+      sizeGB: 1

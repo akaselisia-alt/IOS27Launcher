@@ -236,6 +236,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun accountPrefs() = getSharedPreferences("account", MODE_PRIVATE)
 
+    /** The address the user typed, else the one built into this APK (set by the LAUNCHER_SERVER build variable). */
+    private fun serverBase(): String {
+        val s = accountPrefs().getString("server", "") ?: ""
+        return if (s.isNotEmpty()) s else BuildConfig.DEFAULT_SERVER
+    }
+
     /** Reads at most max bytes so a bad server can't fill the phone's memory. */
     private fun readLimited(input: InputStream, max: Int): String {
         val out = ByteArrayOutputStream()
@@ -773,7 +779,8 @@ class MainActivity : AppCompatActivity() {
         fun acctState(): String {
             val p = accountPrefs()
             return JSONObject()
-                .put("server", p.getString("server", "") ?: "")
+                .put("server", serverBase())
+                .put("builtIn", BuildConfig.DEFAULT_SERVER.isNotEmpty())
                 .put("id", p.getString("id", "") ?: "")
                 .put("signedIn", !p.getString("token", "").isNullOrEmpty())
                 .toString()
@@ -785,7 +792,7 @@ class MainActivity : AppCompatActivity() {
             val u = url.trim().trimEnd('/')
             val p = accountPrefs()
             if (u.isEmpty()) {
-                p.edit().remove("server").remove("token").remove("id").apply()
+                if ((p.getString("server", "") ?: "").isNotEmpty()) p.edit().remove("server").remove("token").remove("id").apply()
                 return ""
             }
             return try {
@@ -815,8 +822,8 @@ class MainActivity : AppCompatActivity() {
                 var text = ""
                 try {
                     val p = accountPrefs()
-                    val base = p.getString("server", "") ?: ""
-                    if (base.isEmpty()) throw IllegalStateException("Set your server address first")
+                    val base = serverBase()
+                    if (base.isEmpty()) throw IllegalStateException("No server is set up yet")
                     if (!(path == "/health" || path.startsWith("/api/"))) throw IllegalArgumentException("Bad request")
                     if (method != "GET" && method != "POST" && method != "PUT") throw IllegalArgumentException("Bad request")
                     val c = URL(base + path).openConnection() as HttpURLConnection
@@ -826,7 +833,7 @@ class MainActivity : AppCompatActivity() {
                     c.instanceFollowRedirects = false
                     c.setRequestProperty("Accept", "application/json")
                     val token = p.getString("token", "") ?: ""
-                    val isAuthCall = path == "/api/login" || path == "/api/register"
+                    val isAuthCall = path == "/api/login" || path == "/api/register" || path == "/api/recover"
                     if (token.isNotEmpty() && !isAuthCall) c.setRequestProperty("Authorization", "Bearer $token")
                     if (method != "GET") {
                         c.doOutput = true
@@ -839,7 +846,7 @@ class MainActivity : AppCompatActivity() {
                     if (isAuthCall && status in 200..299) {
                         val j = JSONObject(text)
                         p.edit().putString("token", j.getString("token")).putString("id", j.getString("id")).apply()
-                        text = JSONObject().put("id", j.getString("id")).toString()
+                        text = JSONObject().put("id", j.getString("id")).put("recovery", j.optString("recovery", "")).toString()
                     }
                     // an expired/revoked session: forget it (but a wrong old password on /api/password is not that)
                     if (status == 401 && token.isNotEmpty() && !isAuthCall) p.edit().remove("token").remove("id").apply()

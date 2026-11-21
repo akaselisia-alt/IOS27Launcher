@@ -11,6 +11,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      LAUNCHER_SERVER: ${{ vars.LAUNCHER_SERVER }}
     steps:
       - uses: actions/checkout@v4
 

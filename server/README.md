@@ -35,11 +35,13 @@ Settings (home screen) -> Server -> paste your `https://...` address -> Save -> 
 | Method | Path | Body | Notes |
 | --- | --- | --- | --- |
 | GET | `/health` | | `{ok:true}` |
-| POST | `/api/register` | `{id, password}` | ID 3-24 chars `a-z 0-9 . _`, password 8-128 chars. Returns `{id, token}` |
+| POST | `/api/register` | `{id, password}` | ID 3-24 chars `a-z 0-9 . _`, password 8-128 chars. Returns `{id, token, recovery}` (recovery code is shown once) |
 | POST | `/api/login` | `{id, password}` | Returns `{id, token}` |
 | GET | `/api/me` | | needs `Authorization: Bearer <token>` |
 | GET | `/api/settings` | | `{settings, updatedAt}` |
 | PUT | `/api/settings` | `{settings:{...}}` | max 64 KB |
+| POST | `/api/recover` | `{id, recovery, newPassword}` | resets a forgotten password with the one-time recovery code; returns a new `{token, recovery}` |
+| POST | `/api/recovery-code` | `{password}` | makes a new recovery code (old one stops working) |
 | POST | `/api/logout` | | ends this session |
 | POST | `/api/password` | `{oldPassword, newPassword}` | signs out other devices |
 | POST | `/api/account/delete` | `{password}` | deletes the account and its data |
@@ -50,4 +52,4 @@ Salted scrypt password hashing, constant-time comparison, random session tokens 
 
 ## Not included (be aware)
 
-There is no email, so **a forgotten password cannot be reset** - the owner of the server would have to delete the account so the ID can be registered again. Back up `DATA_DIR/db.json` if you care about the accounts.
+There is no email. A forgotten password is reset with the recovery code shown at sign-up. If both are lost, the owner of the server has to delete the account so the ID can be registered again. Back up `DATA_DIR/db.json` if you care about the accounts.

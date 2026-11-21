@@ -202,8 +202,8 @@
     <div class="card" id="stAccount"></div>
     <div class="small">No Google account needed. Your launcher ID works only with your own server and syncs your layout, wallpaper choice, icon style, dock and hidden apps (not photos).</div>
 
-    <div class="sec">Server</div>
-    <div class="card">
+    <div class="sec" id="stServerSec">Server</div>
+    <div class="card" id="stServerCard">
       <div class="row"><span>Address</span><input id="stServer" type="text" placeholder="https://your-server.example.com" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
       <div class="row"><button class="pill" id="stSave">Save</button><button class="pill" id="stTest">Test connection</button></div>
       <div class="small" id="stServerMsg"></div>
@@ -1081,7 +1081,7 @@
   }
   window.onNet = function (id, status, text) { var f = net[id]; if (f) { delete net[id]; f(status, text); } };
   function errText(s, j) { return (j && j.error) ? j.error : (s === 0 ? 'No connection' : 'Error ' + s); }
-  var stMsgEl = null;
+  var stMsgEl = null, pendingRecovery = '', forgot = false;
   function stNote(t) { if (stMsgEl) stMsgEl.textContent = t; }
   function saveSync() { try { localStorage.setItem('ios27sync', JSON.stringify(syncState)); } catch (e) {} }
 
@@ -1131,17 +1131,50 @@
 
   function renderAccount() {
     var box = $('stAccount'); box.innerHTML = '';
+    if (pendingRecovery) {
+      box.innerHTML = '<div class="small" style="padding:12px 14px"><b>Save your recovery code now.</b> It is the only way to reset your password if you forget it (there is no email). It is shown once.</div>' +
+        '<div class="row"><b id="stRc" style="letter-spacing:1px;font-size:17px;user-select:all"></b></div>' +
+        '<div class="row"><button class="pill" id="stRcCopy">Copy</button><button class="pill" id="stRcDone">I saved it</button></div>' +
+        '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
+      $('stRc').textContent = pendingRecovery; stMsgEl = $('stMsg');
+      $('stRcCopy').onclick = function () { try { navigator.clipboard.writeText(pendingRecovery).then(function () { stNote('Copied.'); }, function () { stNote('Select the code and copy it.'); }); } catch (e) { stNote('Select the code and copy it.'); } };
+      $('stRcDone').onclick = function () { pendingRecovery = ''; renderAccount(); };
+      return;
+    }
     if (!acct.server) {
-      box.innerHTML = '<div class="small" style="padding:12px 14px">Set your server address below first. The server is in the <b>server</b> folder of this project; its README explains how to run it.</div><div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
+      box.innerHTML = '<div class="small" style="padding:12px 14px">No account server is set up yet. Enter its address below (see DEPLOY.md in the project).</div><div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
       stMsgEl = $('stMsg'); return;
+    }
+    if (!acct.signedIn && forgot) {
+      box.innerHTML =
+        '<div class="row"><span>ID</span><input id="stId" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
+        '<div class="row"><span>Recovery code</span><input id="stRec" type="text" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>' +
+        '<div class="row"><span>New password</span><input id="stPw" type="password" placeholder="8+ characters" autocomplete="off"></div>' +
+        '<div class="row"><button class="pill" id="stReset">Reset password</button><button class="pill" id="stBack">Back</button></div>' +
+        '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
+      stMsgEl = $('stMsg');
+      $('stBack').onclick = function () { forgot = false; renderAccount(); };
+      $('stReset').onclick = function () {
+        var id = $('stId').value.trim().toLowerCase(), rc = $('stRec').value.trim(), pw = $('stPw').value;
+        if (!id || !rc) { stNote('Enter your ID and recovery code.'); return; }
+        if (pw.length < 8) { stNote('New password needs at least 8 characters.'); return; }
+        stNote('Resetting…');
+        api('POST', '/api/recover', { id: id, recovery: rc, newPassword: pw }, function (s, j) {
+          if (s === 200) { forgot = false; pendingRecovery = j.recovery || ''; acctRefresh(); renderAccount(); }
+          else stNote(errText(s, j));
+        });
+      };
+      return;
     }
     if (!acct.signedIn) {
       box.innerHTML =
         '<div class="row"><span>ID</span><input id="stId" type="text" placeholder="your launcher ID" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
         '<div class="row"><span>Password</span><input id="stPw" type="password" placeholder="8+ characters" autocomplete="off"></div>' +
         '<div class="row"><button class="pill" id="stUp">Create account</button><button class="pill" id="stIn">Sign in</button></div>' +
+        '<div class="row"><button class="pill" id="stForgot">Forgot password?</button></div>' +
         '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
       stMsgEl = $('stMsg');
+      $('stForgot').onclick = function () { forgot = true; renderAccount(); };
       var creds = function () {
         var id = $('stId').value.trim().toLowerCase(), pw = $('stPw').value;
         if (!/^[a-z0-9_.]{3,24}$/.test(id)) { stNote('ID: 3-24 letters, numbers, dot or underscore.'); return null; }
@@ -1152,7 +1185,7 @@
         var c = creds(); if (!c) return;
         stNote('Creating your account…');
         api('POST', '/api/register', c, function (s, j) {
-          if (s === 201 || s === 200) { acctRefresh(); stNote('Account created. Saving this phone’s settings…'); pushSettings(false); }
+          if (s === 201 || s === 200) { pendingRecovery = j.recovery || ''; acctRefresh(); pushSettings(true); renderAccount(); }
           else stNote(errText(s, j));
         });
       };
@@ -1177,6 +1210,7 @@
       '<div class="row"><span>Old password</span><input id="stOld" type="password" autocomplete="off"></div>' +
       '<div class="row"><span>New password</span><input id="stNew" type="password" placeholder="8+ characters" autocomplete="off"></div>' +
       '<div class="row"><button class="pill" id="stChg">Change password</button><button class="pill" id="stOut">Sign out</button></div>' +
+      '<div class="row"><button class="pill" id="stNewRc">New recovery code</button></div>' +
       '<div class="row"><span>Password to delete</span><input id="stDelPw" type="password" autocomplete="off"></div>' +
       '<div class="row"><button class="pill" id="stDel" style="background:#ff453a;color:#fff">Delete account</button></div>' +
       '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
@@ -1196,6 +1230,13 @@
     $('stOut').onclick = function () {
       api('POST', '/api/logout', {}, function () { if (A) A.acctSignOut(); acctRefresh(); stNote('Signed out.'); });
     };
+    $('stNewRc').onclick = function () {
+      var pw = $('stDelPw').value;
+      if (!pw) { stNote('Type your password in the box below first.'); return; }
+      api('POST', '/api/recovery-code', { password: pw }, function (s, j) {
+        if (s === 200) { pendingRecovery = j.recovery || ''; renderAccount(); } else stNote(errText(s, j));
+      });
+    };
     $('stDel').onclick = function () {
       var pw = $('stDelPw').value;
       if (!pw) { stNote('Type your password above to delete the account.'); return; }
@@ -1209,11 +1250,14 @@
   function openSt() {
     closeAll();
     acctRefresh();
+    forgot = false;
     renderAccount();
     $('stServer').value = acct.server || '';
     $('stServerMsg').textContent = '';
     sw($('stLock'), cfg.lockscreen, function (v) { cfg.lockscreen = v; save(); });
     $('stHz').textContent = A ? (A.getHz() + ' Hz (max for this screen)') : '—';
+    $('stServerCard').style.display = acct.builtIn ? 'none' : '';
+    $('stServerSec').style.display = acct.builtIn ? 'none' : '';
     show(stg);
   }
   function saveServer() {

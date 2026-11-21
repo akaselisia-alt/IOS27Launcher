@@ -13,6 +13,14 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+        // Your account server, baked into the APK. Set the LAUNCHER_SERVER repository variable (https://...).
+        val server = (System.getenv("LAUNCHER_SERVER") ?: "").trim().trimEnd('/')
+        require(server.isEmpty() || server.startsWith("https://")) { "LAUNCHER_SERVER must start with https://" }
+        buildConfigField("String", "DEFAULT_SERVER", "\"" + server.replace("\"", "") + "\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     // "standard" = the stable launcher. "ai" = same launcher plus an on-device AI engine (needs Android 8+).
