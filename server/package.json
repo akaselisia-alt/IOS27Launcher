@@ -1,0 +1,9 @@
+{
+  "name": "ios27-launcher-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Account + settings sync server for the iOS 27 Launcher",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}

@@ -193,6 +193,34 @@
     <div id="aiBar"><input id="aiIn" type="text" placeholder="Tell me what to do..." autocomplete="off"><button id="aiMic">&#127908;</button><button id="aiSend">&#8593;</button></div>
   </div>
 
+  <!-- Settings app: launcher account + server -->
+  <div id="st" class="sheet">
+    <div class="done" id="stDone">Done</div>
+    <h2>Settings</h2>
+
+    <div class="sec">Launcher account</div>
+    <div class="card" id="stAccount"></div>
+    <div class="small">No Google account needed. Your launcher ID works only with your own server and syncs your layout, wallpaper choice, icon style, dock and hidden apps (not photos).</div>
+
+    <div class="sec">Server</div>
+    <div class="card">
+      <div class="row"><span>Address</span><input id="stServer" type="text" placeholder="https://your-server.example.com" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="row"><button class="pill" id="stSave">Save</button><button class="pill" id="stTest">Test connection</button></div>
+      <div class="small" id="stServerMsg"></div>
+    </div>
+
+    <div class="sec">Launcher</div>
+    <div class="card">
+      <div class="row" id="stCust"><span>Customize</span><span style="opacity:.6">&rsaquo;</span></div>
+      <div class="row" id="stAsst"><span>Assistant &amp; on-device AI</span><span style="opacity:.6">&rsaquo;</span></div>
+      <div class="row"><span>iOS lock screen after unlock</span><div class="sw" id="stLock"></div></div>
+      <div class="row"><span>Screen refresh rate</span><span id="stHz" style="opacity:.75;font-size:13px"></span></div>
+    </div>
+
+    <div class="sec">Privacy</div>
+    <div class="card"><div class="small" style="padding:12px 14px">The launcher and the assistant work fully offline. The internet is used only when you sign in to your own server: your password is sent to it over HTTPS and the server keeps only a salted hash. The sign-in token stays inside the app.</div></div>
+  </div>
+
   <!-- Customize app -->
   <div id="cz" class="sheet">
     <div class="done" id="czDone">Done</div>
@@ -258,13 +286,16 @@
   var A = window.Android;
   var $ = function (id) { return document.getElementById(id); };
   var msgT;
+  var acct = { server: '', id: '', signedIn: false }, syncT;
+  var syncState = (function () { try { return Object.assign({ auto: true, last: 0 }, JSON.parse(localStorage.getItem('ios27sync') || '{}')); } catch (e) { return { auto: true, last: 0 }; } })();
   function msg(t) { var m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(msgT); msgT = setTimeout(function () { m.style.display = 'none'; }, 2600); }
 
   /* ---------- Settings ---------- */
   var DEF = { wall: 'liquid', cols: 4, size: 54, labels: true, shape: 'squircle', clock: true, lockscreen: true, hidden: [], dock: [] };
   var cfg = load();
   function load() { try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem('ios27cfg') || '{}')); } catch (e) { return Object.assign({}, DEF); } }
-  function save() { try { localStorage.setItem('ios27cfg', JSON.stringify(cfg)); } catch (e) {} }
+  function saveLocal() { try { localStorage.setItem('ios27cfg', JSON.stringify(cfg)); } catch (e) {} }
+  function save() { saveLocal(); scheduleSync(); }
   function customWall() { try { return localStorage.getItem('ios27wall') || ''; } catch (e) { return ''; } }
 
   function mesh(base, blobs) {
@@ -331,6 +362,7 @@
 
   /* ---------- Apps ---------- */
   var VIRT = {
+    '__settings__': { name: 'Settings', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9aa0b4"/><stop offset="1" stop-color="#4a4e60"/></linearGradient></defs><rect width="48" height="48" fill="url(#gs)"/><circle cx="24" cy="24" r="7" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M24 8v6M24 34v6M8 24h6M34 24h6M12.7 12.7l4.2 4.2M31.1 31.1l4.2 4.2M35.3 12.7l-4.2 4.2M16.9 31.1l-4.2 4.2" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/></svg>' },
     '__apps__':   { name: 'Apps', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="ga" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b6078"/><stop offset="1" stop-color="#1f2030"/></linearGradient></defs><rect width="48" height="48" fill="url(#ga)"/><rect x="10" y="10" width="12" height="12" rx="3.5" fill="#fff" opacity=".95"/><rect x="26" y="10" width="12" height="12" rx="3.5" fill="#fff" opacity=".75"/><rect x="10" y="26" width="12" height="12" rx="3.5" fill="#fff" opacity=".75"/><rect x="26" y="26" width="12" height="12" rx="3.5" fill="#fff" opacity=".95"/></svg>' },
     '__custom__': { name: 'Customize', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b48bff"/><stop offset="1" stop-color="#4f35e8"/></linearGradient></defs><rect width="48" height="48" fill="url(#gc)"/><path d="M10 16h28M10 24h28M10 32h28" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".45"/><circle cx="18" cy="16" r="4.5" fill="#fff"/><circle cx="31" cy="24" r="4.5" fill="#fff"/><circle cx="21" cy="32" r="4.5" fill="#fff"/></svg>' },
     '__ai__':     { name: 'Assistant', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5fa2"/><stop offset=".5" stop-color="#8f5cff"/><stop offset="1" stop-color="#2fb7ff"/></linearGradient></defs><rect width="48" height="48" fill="#12121a"/><circle cx="24" cy="24" r="14" fill="url(#gg)"/><circle cx="24" cy="24" r="8" fill="#12121a" opacity=".5"/><circle cx="20" cy="19" r="3" fill="#fff" opacity=".55"/></svg>' }
@@ -363,6 +395,7 @@
       if (app.pkg === '__apps__') openLib();
       else if (app.pkg === '__custom__') openCz();
       else if (app.pkg === '__ai__') openAI();
+      else if (app.pkg === '__settings__') openSt();
       else if (A) { closeAll(); A.openApp(app.pkg); }
     });
     return el;
@@ -399,6 +432,7 @@
     dockApps.forEach(function (a) { dock.appendChild(tile(a)); });
     dock.appendChild(tile({ name: 'Apps', pkg: '__apps__' }));
 
+    home.unshift({ name: 'Settings', pkg: '__settings__' });
     home.unshift({ name: 'Customize', pkg: '__custom__' });
     home.unshift({ name: 'Assistant', pkg: '__ai__' });
     var pages = $('pages'), dots = $('dots');
@@ -434,17 +468,21 @@
   tick(); setInterval(tick, 5000);
 
   /* ---------- Sheets (spring in/out) ---------- */
-  var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), ls = $('ls');
+  var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), st = $('st'), ls = $('ls');
   function isOpen(el) { return el.classList.contains('in'); }
   function show(el) { el.classList.add('show'); void el.offsetWidth; el.classList.add('in'); }
   function hide(el) {
     if (!el.classList.contains('show')) return;
     el.classList.remove('in');
-    setTimeout(function () { if (!el.classList.contains('in')) el.classList.remove('show'); }, 300);
+    setTimeout(function () {
+      if (el.classList.contains('in')) return;
+      el.classList.remove('show');
+      if (el === st) $('stAccount').innerHTML = '';   // don't leave typed passwords in the page
+    }, 300);
   }
-  function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai); }
-  function closeAll() { [lib, cz, cc, rc, ai].forEach(hide); }
-  ['libDone', 'czDone', 'rcDone', 'aiDone'].forEach(function (id) { $(id).addEventListener('click', closeAll); });
+  function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai) || isOpen(st); }
+  function closeAll() { [lib, cz, cc, rc, ai, st].forEach(hide); }
+  ['libDone', 'czDone', 'rcDone', 'aiDone', 'stDone'].forEach(function (id) { $(id).addEventListener('click', closeAll); });
 
   function openLib() {
     closeAll();
@@ -909,6 +947,7 @@
       else if (w === 'customize') openCz();
       else if (w === 'recents') openRecents();
       else if (w === 'lock_screen') showLock();
+      else if (w === 'launcher_settings') openSt();
       else return 'I can\'t show that.';
       return '';
     },
@@ -931,7 +970,7 @@
   /* --- offline command understanding --- */
   var TOG = { torch: 'torch', flashlight: 'torch', 'flash light': 'torch', light: 'torch', dnd: 'dnd', 'do not disturb': 'dnd', 'dont disturb': 'dnd', focus: 'dnd', silent: 'silent', 'silent mode': 'silent', mute: 'silent', vibrate: 'silent', rotation: 'rotate', 'auto rotate': 'rotate', autorotate: 'rotate', rotate: 'rotate', 'screen rotation': 'rotate' };
   var SHORT = { wifi: 'wifi', 'wi-fi': 'wifi', bluetooth: 'bt', 'mobile data': 'data', data: 'data', internet: 'data', 'airplane mode': 'air', airplane: 'air', 'flight mode': 'air', location: 'location', gps: 'location', hotspot: 'hotspot', nfc: 'nfc', 'battery saver': 'saver', 'power saving': 'saver', settings: 'settings', camera: 'camera', calculator: 'calc', clock: 'clock', alarms: 'clock', display: 'display' };
-  var PANELS = { 'control center': 'control_center', 'app library': 'app_library', customize: 'customize', recents: 'recents', 'recent apps': 'recents', 'lock screen': 'lock_screen' };
+  var PANELS = { 'control center': 'control_center', 'app library': 'app_library', customize: 'customize', recents: 'recents', 'recent apps': 'recents', 'lock screen': 'lock_screen', 'launcher settings': 'launcher_settings', account: 'launcher_settings', 'my account': 'launcher_settings' };
 
   function parseTime(s) {
     var m = s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/);
@@ -1030,6 +1069,168 @@
     }
     return local1(text);
   }
+
+
+  /* ---------- Settings app: launcher account + sync (your own server, no Google) ---------- */
+  var net = {}, netN = 0;
+  function api(method, path, body, cb) {
+    if (!A) { cb(0, { error: 'Only works inside the launcher app' }); return; }
+    var id = ++netN;
+    net[id] = function (status, text) { var j = {}; try { j = JSON.parse(text); } catch (e) {} cb(status, j); };
+    A.acctRequest(id, method, path, body ? JSON.stringify(body) : '');
+  }
+  window.onNet = function (id, status, text) { var f = net[id]; if (f) { delete net[id]; f(status, text); } };
+  function errText(s, j) { return (j && j.error) ? j.error : (s === 0 ? 'No connection' : 'Error ' + s); }
+  var stMsgEl = null;
+  function stNote(t) { if (stMsgEl) stMsgEl.textContent = t; }
+  function saveSync() { try { localStorage.setItem('ios27sync', JSON.stringify(syncState)); } catch (e) {} }
+
+  function syncData() {
+    return { wall: cfg.wall === 'custom' ? 'liquid' : cfg.wall, cols: cfg.cols, size: cfg.size, labels: cfg.labels, shape: cfg.shape, clock: cfg.clock, lockscreen: cfg.lockscreen, hidden: cfg.hidden.slice(0, 300), dock: cfg.dock.slice(0, 4) };
+  }
+  function applySync(d) {
+    if (!d || typeof d !== 'object') return false;
+    var n = Object.assign({}, cfg);
+    if (typeof d.wall === 'string' && (WALLS[d.wall] || d.wall === 'system')) n.wall = d.wall;
+    if (d.cols === 4 || d.cols === 5) n.cols = d.cols;
+    if (typeof d.size === 'number' && d.size >= 40 && d.size <= 64) n.size = Math.round(d.size);
+    if (typeof d.labels === 'boolean') n.labels = d.labels;
+    if (typeof d.clock === 'boolean') n.clock = d.clock;
+    if (typeof d.lockscreen === 'boolean') n.lockscreen = d.lockscreen;
+    if (typeof d.shape === 'string' && RADIUS[d.shape]) n.shape = d.shape;
+    function strs(a, max) { return Array.isArray(a) ? a.filter(function (x) { return typeof x === 'string' && x.length < 200; }).slice(0, max) : null; }
+    var hh = strs(d.hidden, 300), dd = strs(d.dock, 4);
+    if (hh) n.hidden = hh;
+    if (dd) n.dock = dd;
+    cfg = n; saveLocal(); applyCfg(); render();
+    return true;
+  }
+  function scheduleSync() {
+    if (!syncState || !syncState.auto || !acct || !acct.signedIn) return;
+    clearTimeout(syncT);
+    syncT = setTimeout(function () { pushSettings(true); }, 3000);
+  }
+  function pushSettings(quiet) {
+    api('PUT', '/api/settings', { settings: syncData() }, function (s, j) {
+      if (s === 200) { syncState.last = j.updatedAt; saveSync(); if (!quiet) stNote('Uploaded ' + new Date().toLocaleTimeString()); }
+      else { if (!quiet) stNote(errText(s, j)); if (s === 401) acctRefresh(); }
+    });
+  }
+  function pullSettings() {
+    api('GET', '/api/settings', null, function (s, j) {
+      if (s === 200 && j.settings) { applySync(j.settings); syncState.last = j.updatedAt; saveSync(); stNote('Downloaded your settings.'); }
+      else if (s === 200) stNote('Nothing saved on your account yet.');
+      else { stNote(errText(s, j)); if (s === 401) acctRefresh(); }
+    });
+  }
+
+  function acctRefresh() {
+    if (A) { try { acct = JSON.parse(A.acctState()); } catch (e) {} }
+    if (isOpen(st)) renderAccount();
+  }
+
+  function renderAccount() {
+    var box = $('stAccount'); box.innerHTML = '';
+    if (!acct.server) {
+      box.innerHTML = '<div class="small" style="padding:12px 14px">Set your server address below first. The server is in the <b>server</b> folder of this project; its README explains how to run it.</div><div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
+      stMsgEl = $('stMsg'); return;
+    }
+    if (!acct.signedIn) {
+      box.innerHTML =
+        '<div class="row"><span>ID</span><input id="stId" type="text" placeholder="your launcher ID" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
+        '<div class="row"><span>Password</span><input id="stPw" type="password" placeholder="8+ characters" autocomplete="off"></div>' +
+        '<div class="row"><button class="pill" id="stUp">Create account</button><button class="pill" id="stIn">Sign in</button></div>' +
+        '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
+      stMsgEl = $('stMsg');
+      var creds = function () {
+        var id = $('stId').value.trim().toLowerCase(), pw = $('stPw').value;
+        if (!/^[a-z0-9_.]{3,24}$/.test(id)) { stNote('ID: 3-24 letters, numbers, dot or underscore.'); return null; }
+        if (pw.length < 8) { stNote('Password needs at least 8 characters.'); return null; }
+        return { id: id, password: pw };
+      };
+      $('stUp').onclick = function () {
+        var c = creds(); if (!c) return;
+        stNote('Creating your account…');
+        api('POST', '/api/register', c, function (s, j) {
+          if (s === 201 || s === 200) { acctRefresh(); stNote('Account created. Saving this phone’s settings…'); pushSettings(false); }
+          else stNote(errText(s, j));
+        });
+      };
+      $('stIn').onclick = function () {
+        var c = creds(); if (!c) return;
+        stNote('Signing in…');
+        api('POST', '/api/login', c, function (s, j) {
+          if (s !== 200) { stNote(errText(s, j)); return; }
+          acctRefresh();
+          api('GET', '/api/settings', null, function (s2, j2) {
+            if (s2 === 200 && j2.settings) { applySync(j2.settings); syncState.last = j2.updatedAt; saveSync(); stNote('Signed in. Settings loaded from your account.'); }
+            else { pushSettings(false); stNote('Signed in. This phone’s settings were saved to your account.'); }
+          });
+        });
+      };
+      return;
+    }
+    box.innerHTML =
+      '<div class="row"><span>Signed in as</span><b id="stWho"></b></div>' +
+      '<div class="row"><span>Auto-sync my settings</span><div class="sw" id="stAuto"></div></div>' +
+      '<div class="row"><button class="pill" id="stPush">Upload now</button><button class="pill" id="stPull">Download</button></div>' +
+      '<div class="row"><span>Old password</span><input id="stOld" type="password" autocomplete="off"></div>' +
+      '<div class="row"><span>New password</span><input id="stNew" type="password" placeholder="8+ characters" autocomplete="off"></div>' +
+      '<div class="row"><button class="pill" id="stChg">Change password</button><button class="pill" id="stOut">Sign out</button></div>' +
+      '<div class="row"><span>Password to delete</span><input id="stDelPw" type="password" autocomplete="off"></div>' +
+      '<div class="row"><button class="pill" id="stDel" style="background:#ff453a;color:#fff">Delete account</button></div>' +
+      '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
+    stMsgEl = $('stMsg');
+    $('stWho').textContent = acct.id;
+    sw($('stAuto'), syncState.auto, function (v) { syncState.auto = v; saveSync(); });
+    $('stPush').onclick = function () { stNote('Uploading…'); pushSettings(false); };
+    $('stPull').onclick = function () { stNote('Downloading…'); pullSettings(); };
+    $('stChg').onclick = function () {
+      var o = $('stOld').value, n = $('stNew').value;
+      if (n.length < 8) { stNote('New password needs at least 8 characters.'); return; }
+      api('POST', '/api/password', { oldPassword: o, newPassword: n }, function (s, j) {
+        if (s === 200) { $('stOld').value = ''; $('stNew').value = ''; stNote('Password changed. Your other devices were signed out.'); }
+        else stNote(errText(s, j));
+      });
+    };
+    $('stOut').onclick = function () {
+      api('POST', '/api/logout', {}, function () { if (A) A.acctSignOut(); acctRefresh(); stNote('Signed out.'); });
+    };
+    $('stDel').onclick = function () {
+      var pw = $('stDelPw').value;
+      if (!pw) { stNote('Type your password above to delete the account.'); return; }
+      api('POST', '/api/account/delete', { password: pw }, function (s, j) {
+        if (s === 200) { if (A) A.acctSignOut(); acctRefresh(); stNote('Account deleted.'); }
+        else stNote(errText(s, j));
+      });
+    };
+  }
+
+  function openSt() {
+    closeAll();
+    acctRefresh();
+    renderAccount();
+    $('stServer').value = acct.server || '';
+    $('stServerMsg').textContent = '';
+    sw($('stLock'), cfg.lockscreen, function (v) { cfg.lockscreen = v; save(); });
+    $('stHz').textContent = A ? (A.getHz() + ' Hz (max for this screen)') : '—';
+    show(st);
+  }
+  function saveServer() {
+    var e = A ? A.acctSetServer($('stServer').value) : 'Only works inside the launcher app';
+    $('stServerMsg').textContent = e || 'Saved.';
+    acctRefresh();
+    return !e;
+  }
+  $('stSave').onclick = saveServer;
+  $('stTest').onclick = function () {
+    if (!saveServer()) return;
+    $('stServerMsg').textContent = 'Testing…';
+    api('GET', '/health', null, function (s, j) { $('stServerMsg').textContent = (s === 200 && j.ok) ? 'Connected ✓' : 'Could not reach the server: ' + errText(s, j); });
+  };
+  $('stCust').onclick = function () { closeAll(); setTimeout(openCz, 180); };
+  $('stAsst').onclick = function () { closeAll(); setTimeout(openAI, 180); };
+  acctRefresh();
 
   /* ---------- Gestures ---------- */
   var sx = 0, sy = 0, sT = 0, fromGrab = false, fromDock = false;

@@ -33,6 +33,10 @@ import android.os.Bundle
 import android.provider.AlarmClock
 import android.provider.OpenableColumns
 import java.io.File
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URI
+import java.net.URL
 import java.util.concurrent.Executors
 import android.provider.MediaStore
 import android.provider.Settings
@@ -63,6 +67,7 @@ class MainActivity : AppCompatActivity() {
     private var torchOn = false
     private var wasScreenOff = false
     private val llmExecutor = Executors.newSingleThreadExecutor()
+    private val netExecutor = Executors.newFixedThreadPool(2)
 
     private fun modelFile() = File(filesDir, "model.litertlm")
 
@@ -227,6 +232,23 @@ class MainActivity : AppCompatActivity() {
             tmp.delete()
             js("window.onModelError(" + JSONObject.quote(t.message ?: "Import failed") + ")")
         }
+    }
+
+    private fun accountPrefs() = getSharedPreferences("account", MODE_PRIVATE)
+
+    /** Reads at most max bytes so a bad server can't fill the phone's memory. */
+    private fun readLimited(input: InputStream, max: Int): String {
+        val out = ByteArrayOutputStream()
+        val buf = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            total += n
+            if (total > max) throw IllegalStateException("Response too large")
+            out.write(buf, 0, n)
+        }
+        return out.toString("UTF-8")
     }
 
     private fun hasUsageAccess(): Boolean {
@@ -741,6 +763,94 @@ class MainActivity : AppCompatActivity() {
                     err = t.message ?: t.javaClass.simpleName
                 }
                 val js = "window.onLocal(" + id + "," + JSONObject.quote(text) + "," + JSONObject.quote(err) + ")"
+                runOnUiThread { webView.evaluateJavascript(js, null) }
+            }
+        }
+
+        // ---------- Launcher account (your own server; no Google account) ----------
+
+        @JavascriptInterface
+        fun acctState(): String {
+            val p = accountPrefs()
+            return JSONObject()
+                .put("server", p.getString("server", "") ?: "")
+                .put("id", p.getString("id", "") ?: "")
+                .put("signedIn", !p.getString("token", "").isNullOrEmpty())
+                .toString()
+        }
+
+        /** Returns "" when saved, otherwise a message. Changing the server signs you out so the token never goes to another server. */
+        @JavascriptInterface
+        fun acctSetServer(url: String): String {
+            val u = url.trim().trimEnd('/')
+            val p = accountPrefs()
+            if (u.isEmpty()) {
+                p.edit().remove("server").remove("token").remove("id").apply()
+                return ""
+            }
+            return try {
+                val uri = URI(u)
+                if (uri.scheme != "https" || uri.host.isNullOrEmpty() || uri.userInfo != null || u.length > 200 || uri.query != null) {
+                    "Use a full https:// address, like https://my-server.example.com"
+                } else {
+                    if (p.getString("server", "") != u) p.edit().remove("token").remove("id").apply()
+                    p.edit().putString("server", u).apply()
+                    ""
+                }
+            } catch (_: Exception) {
+                "That doesn't look like a web address"
+            }
+        }
+
+        @JavascriptInterface
+        fun acctSignOut() {
+            accountPrefs().edit().remove("token").remove("id").apply()
+        }
+
+        /** Talks to your server over HTTPS. The sign-in token stays inside the app; the page only ever sees the result via window.onNet. */
+        @JavascriptInterface
+        fun acctRequest(id: Int, method: String, path: String, body: String) {
+            netExecutor.execute {
+                var status = 0
+                var text = ""
+                try {
+                    val p = accountPrefs()
+                    val base = p.getString("server", "") ?: ""
+                    if (base.isEmpty()) throw IllegalStateException("Set your server address first")
+                    if (!(path == "/health" || path.startsWith("/api/"))) throw IllegalArgumentException("Bad request")
+                    if (method != "GET" && method != "POST" && method != "PUT") throw IllegalArgumentException("Bad request")
+                    val c = URL(base + path).openConnection() as HttpURLConnection
+                    c.requestMethod = method
+                    c.connectTimeout = 15000
+                    c.readTimeout = 20000
+                    c.instanceFollowRedirects = false
+                    c.setRequestProperty("Accept", "application/json")
+                    val token = p.getString("token", "") ?: ""
+                    val isAuthCall = path == "/api/login" || path == "/api/register"
+                    if (token.isNotEmpty() && !isAuthCall) c.setRequestProperty("Authorization", "Bearer $token")
+                    if (method != "GET") {
+                        c.doOutput = true
+                        c.setRequestProperty("Content-Type", "application/json")
+                        c.outputStream.use { it.write(body.toByteArray()) }
+                    }
+                    status = c.responseCode
+                    val stream = if (status in 200..299) c.inputStream else c.errorStream
+                    text = if (stream != null) stream.use { readLimited(it, 1_000_000) } else ""
+                    if (isAuthCall && status in 200..299) {
+                        val j = JSONObject(text)
+                        p.edit().putString("token", j.getString("token")).putString("id", j.getString("id")).apply()
+                        text = JSONObject().put("id", j.getString("id")).toString()
+                    }
+                    // an expired/revoked session: forget it (but a wrong old password on /api/password is not that)
+                    if (status == 401 && token.isNotEmpty() && !isAuthCall) p.edit().remove("token").remove("id").apply()
+                    if (path == "/api/logout" || (path == "/api/account/delete" && status in 200..299)) {
+                        p.edit().remove("token").remove("id").apply()
+                    }
+                } catch (e: Exception) {
+                    status = 0
+                    text = JSONObject().put("error", e.message ?: "No connection").toString()
+                }
+                val js = "window.onNet(" + id + "," + status + "," + JSONObject.quote(text) + ")"
                 runOnUiThread { webView.evaluateJavascript(js, null) }
             }
         }
