@@ -18,6 +18,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.Drawable
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
@@ -252,7 +256,8 @@ class MainActivity : AppCompatActivity() {
                 .distinctBy { it.activityInfo.packageName }
                 .map {
                     val pkg = it.activityInfo.packageName
-                    AppInfo(it.loadLabel(pm).toString(), pkg, customIcon(pkg) ?: it.loadIcon(pm))
+                    val custom = customIcon(pkg)
+                    AppInfo(it.loadLabel(pm).toString(), pkg, custom ?: it.loadIcon(pm), custom != null)
                 }
                 .sortedBy { it.name.lowercase() }
             runOnUiThread {
@@ -374,16 +379,38 @@ class MainActivity : AppCompatActivity() {
             return arr.toString()
         }
 
+        @SuppressLint("NewApi")
         @JavascriptInterface
         fun getIcon(pkg: String): String {
             iconCache[pkg]?.let { return it }
             val app = apps.firstOrNull { it.pkg == pkg } ?: return ""
             return try {
-                val size = 96
+                val size = 120
                 val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val c = Canvas(bmp)
                 val d = app.icon.constantState?.newDrawable()?.mutate() ?: app.icon
-                d.setBounds(0, 0, size, size)
-                d.draw(Canvas(bmp))
+                if (Build.VERSION.SDK_INT >= 26 && d is AdaptiveIconDrawable) {
+                    // Draw both layers edge-to-edge so the icon fills the glass tile (the launcher applies the shape)
+                    val k = size / 72f
+                    val off = (-18 * k).toInt()
+                    val full = (108 * k).toInt()
+                    d.background?.let { it.setBounds(off, off, off + full, off + full); it.draw(c) }
+                    d.foreground?.let { it.setBounds(off, off, off + full, off + full); it.draw(c) }
+                } else if (app.full) {
+                    d.setBounds(0, 0, size, size)
+                    d.draw(c)
+                } else {
+                    // Old-style icon: sit it on a soft light glass tile
+                    val p = Paint(Paint.ANTI_ALIAS_FLAG)
+                    p.shader = LinearGradient(
+                        0f, 0f, 0f, size.toFloat(),
+                        Color.parseColor("#F6F7FB"), Color.parseColor("#D5D9E4"), Shader.TileMode.CLAMP
+                    )
+                    c.drawRect(0f, 0f, size.toFloat(), size.toFloat(), p)
+                    val inset = (size * 0.14f).toInt()
+                    d.setBounds(inset, inset, size - inset, size - inset)
+                    d.draw(c)
+                }
                 val out = ByteArrayOutputStream()
                 bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
                 val uri = "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)

@@ -10,7 +10,10 @@
   html, body { margin: 0; height: 100%; background: transparent; font-family: -apple-system, system-ui, Roboto, sans-serif; color: #fff; overflow: hidden; overscroll-behavior: none; }
   body { display: flex; flex-direction: column; }
   input { user-select: text; -webkit-user-select: text; font-family: inherit; }
-  #wall { position: fixed; inset: 0; z-index: 0; background-size: cover; background-position: center; }
+  #wall { position: fixed; inset: 0; z-index: 0; background-size: cover; background-position: center; overflow: hidden; }
+  .blob { position: absolute; width: 95vmax; height: 95vmax; margin: -47vmax 0 0 -47vmax; border-radius: 50%; animation: drift 18s ease-in-out infinite alternate; will-change: transform; }
+  @keyframes drift { from { transform: translate3d(-7vmax,-5vmax,0) scale(1); } to { transform: translate3d(9vmax,7vmax,0) scale(1.18); } }
+  .scrim { position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.30)); }
   #clock, #pages, #dots, #dock { position: relative; z-index: 1; }
 
   #clock { text-align: center; padding: 12px 0 2px; flex: none; filter: drop-shadow(0 2px 8px rgba(0,0,0,.25)); }
@@ -26,8 +29,11 @@
   .page { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; display: grid; grid-template-columns: repeat(var(--cols), 1fr); grid-auto-rows: var(--cell); padding: 10px 6px 0; align-content: start; contain: layout paint; }
 
   .app { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
-  .ico { width: var(--ico); height: var(--ico); border-radius: var(--rad); background: rgba(255,255,255,.16); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.18); transition: transform .3s var(--spring), opacity .2s; transform: translateZ(0); }
-  .ico img, .ico svg { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .ico { position: relative; width: var(--ico); height: var(--ico); border-radius: var(--rad); background: rgba(255,255,255,.16); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; overflow: hidden; box-shadow: 0 8px 16px -4px rgba(0,0,0,.38), 0 2px 4px rgba(0,0,0,.2); transition: transform .3s var(--spring), opacity .2s; transform: translateZ(0); }
+  /* Liquid glass: curved specular highlight + soft bottom shade, then a glass rim on top */
+  .ico::before { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 2; pointer-events: none; background: radial-gradient(130% 75% at 28% -12%, rgba(255,255,255,.7) 0, rgba(255,255,255,.2) 42%, rgba(255,255,255,0) 62%), linear-gradient(180deg, rgba(255,255,255,0) 55%, rgba(0,0,0,.17) 100%); }
+  .ico::after { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 3; pointer-events: none; box-shadow: inset 0 1.5px 1px rgba(255,255,255,.8), inset 0 -2px 3px rgba(0,0,0,.25), inset 0 0 0 .75px rgba(255,255,255,.42); }
+  .ico img, .ico svg { width: 100%; height: 100%; object-fit: cover; display: block; }
   .app:active .ico { transform: scale(.88); opacity: .85; transition-duration: .1s; }
   .lbl { font-size: 10.5px; max-width: 100%; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
   body.nolabels .lbl { display: none; }
@@ -35,7 +41,7 @@
   #dots { display: flex; justify-content: center; gap: 6px; padding: 4px 0; flex: none; min-height: 14px; }
   #dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.4); transition: transform .25s var(--spring), background .2s; }
   #dots i.on { background: #fff; transform: scale(1.25); }
-  #dock { display: flex; justify-content: space-around; align-items: center; margin: 2px 10px 6px; padding: 10px 6px; border-radius: 26px; background: rgba(255,255,255,.2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); flex: none; }
+  #dock { display: flex; justify-content: space-around; align-items: center; margin: 2px 10px 6px; padding: 10px 6px; border-radius: 28px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.3); box-shadow: inset 0 1px 1px rgba(255,255,255,.5), 0 10px 30px rgba(0,0,0,.25); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); flex: none; }
   #dock .lbl { display: none; }
 
   #grab { position: fixed; left: 0; right: 0; top: 0; height: 46px; z-index: 5; }
@@ -254,27 +260,63 @@
   function msg(t) { var m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(msgT); msgT = setTimeout(function () { m.style.display = 'none'; }, 2600); }
 
   /* ---------- Settings ---------- */
-  var DEF = { wall: 'aurora', cols: 4, size: 54, labels: true, shape: 'squircle', clock: true, lockscreen: true, hidden: [], dock: [] };
+  var DEF = { wall: 'liquid', cols: 4, size: 54, labels: true, shape: 'squircle', clock: true, lockscreen: true, hidden: [], dock: [] };
   var cfg = load();
   function load() { try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem('ios27cfg') || '{}')); } catch (e) { return Object.assign({}, DEF); } }
   function save() { try { localStorage.setItem('ios27cfg', JSON.stringify(cfg)); } catch (e) {} }
   function customWall() { try { return localStorage.getItem('ios27wall') || ''; } catch (e) { return ''; } }
 
+  function mesh(base, blobs) {
+    return blobs.map(function (b) { return 'radial-gradient(' + b[2] + '% ' + b[3] + '% at ' + b[0] + '% ' + b[1] + '%, ' + b[4] + ' 0, transparent 62%)'; }).join(', ') + ', ' + base;
+  }
+  // [id, name, base colour, blobs [x%, y%, rx%, ry%, colour], live?]
+  var DEFS = [
+    ['aurora', 'Aurora', '#1c1346', [[18,14,60,42,'#ff7ad9'],[88,22,55,40,'#6c5cff'],[72,88,75,50,'#2fb7ff'],[8,92,60,44,'#ffb35c']]],
+    ['liquid', 'Liquid', '#0b1030', [[20,12,60,40,'#ff4fa3'],[85,28,55,42,'#7a5cff'],[30,60,70,45,'#27c3ff'],[80,88,70,48,'#ff9f43'],[10,95,60,40,'#ffd166']]],
+    ['liquidlive', 'Liquid', '#0b1030', [[20,12,60,40,'#ff4fa3'],[85,28,55,42,'#7a5cff'],[30,60,70,45,'#27c3ff'],[80,88,70,48,'#ff9f43']], true],
+    ['auroralive', 'Aurora', '#1c1346', [[18,14,60,42,'#ff7ad9'],[88,22,55,40,'#6c5cff'],[72,88,75,50,'#2fb7ff'],[8,92,60,44,'#ffb35c']], true],
+    ['dusk', 'Dusk', '#2a1448', [[80,10,70,45,'#ffcf6b'],[15,55,70,50,'#ff5f8f'],[70,95,80,55,'#5a3bd6']]],
+    ['sunrise', 'Sunrise', '#3a1c5a', [[50,95,90,55,'#ffb347'],[20,60,70,45,'#ff6b6b'],[85,25,60,40,'#ffd1a8']]],
+    ['lagoon', 'Lagoon', '#06284a', [[20,12,60,40,'#7dffd6'],[85,50,70,50,'#2a8cff'],[25,95,70,45,'#1fd1b5']]],
+    ['ocean', 'Ocean', '#031a3a', [[50,90,90,50,'#00b4d8'],[15,40,60,45,'#0077b6'],[85,15,55,40,'#90e0ef']]],
+    ['glacier', 'Glacier', '#0d2a3c', [[20,15,60,40,'#bdf4ff'],[85,50,65,45,'#4cc9f0'],[30,95,70,45,'#a0c4ff']]],
+    ['bloom', 'Bloom', '#6a4fa8', [[80,12,60,40,'#ffd1e8'],[12,45,70,50,'#c9b6ff'],[80,90,70,50,'#ffb59a']]],
+    ['candy', 'Candy', '#7b2ff7', [[15,15,60,40,'#ff7eb3'],[85,40,60,45,'#ffd6e8'],[40,90,70,45,'#6dd5ed']]],
+    ['orchid', 'Orchid', '#2b0a3d', [[20,20,60,45,'#e056fd'],[85,45,60,45,'#7d5fff'],[40,95,70,45,'#ff9ff3']]],
+    ['ruby', 'Ruby', '#2a0510', [[20,20,60,45,'#ff2e63'],[85,70,65,45,'#8f0a2c']]],
+    ['ember', 'Ember', '#1a0505', [[50,100,90,55,'#ff4500'],[20,50,60,45,'#c1121f'],[85,20,55,40,'#ff9f1c']]],
+    ['forest', 'Forest', '#06220f', [[20,20,60,45,'#2e8b57'],[85,60,65,45,'#9be15d'],[40,100,70,40,'#0f5132']]],
+    ['mint', 'Mint', '#0f4c3a', [[25,15,60,40,'#b8f2e6'],[80,60,65,45,'#5eead4']]],
+    ['sand', 'Sand', '#c8a27a', [[20,15,60,40,'#ffe5c4'],[85,70,65,45,'#a9714b']]],
+    ['neon', 'Neon', '#05010f', [[15,20,55,40,'#00f5d4'],[85,30,55,40,'#f15bb5'],[50,90,70,45,'#9b5de5']]],
+    ['cosmic', 'Cosmic', '#0a0420', [[20,20,45,32,'#7b2ff7'],[80,25,40,28,'#f107a3'],[50,80,65,42,'#2a1b8f']]],
+    ['storm', 'Storm', '#1a1f2b', [[20,15,60,40,'#6c7a96'],[85,70,65,45,'#2d3a55'],[50,100,80,40,'#8aa0c8']]],
+    ['midnight', 'Midnight', '#07070f', [[20,15,60,40,'#2b2f77'],[85,70,70,45,'#4a1d6e']]],
+    ['graphite', 'Graphite', '#12141a', [[25,15,70,45,'#5a6173'],[85,85,70,50,'#3a4a6a']]],
+    ['mono', 'Silver', '#cfd3dc', [[20,15,60,40,'#ffffff'],[85,80,70,45,'#9aa3b5']]]
+  ];
+  var WALLS = {};
+  DEFS.forEach(function (d) { WALLS[d[0]] = { name: d[1] + (d[4] ? ' ● Live' : ''), base: d[2], blobs: d[3], css: mesh(d[2], d[3]), live: !!d[4] }; });
   var SCRIM = 'linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.30))';
-  var WALLS = {
-    aurora:   { name: 'Aurora',   css: 'radial-gradient(60% 42% at 18% 14%, #ff7ad9 0, transparent 62%), radial-gradient(55% 40% at 88% 22%, #6c5cff 0, transparent 62%), radial-gradient(75% 50% at 72% 88%, #2fb7ff 0, transparent 66%), radial-gradient(60% 44% at 8% 92%, #ffb35c 0, transparent 62%), #1c1346' },
-    dusk:     { name: 'Dusk',     css: 'radial-gradient(70% 45% at 80% 10%, #ffcf6b 0, transparent 60%), radial-gradient(70% 50% at 15% 55%, #ff5f8f 0, transparent 62%), radial-gradient(80% 55% at 70% 95%, #5a3bd6 0, transparent 66%), #2a1448' },
-    lagoon:   { name: 'Lagoon',   css: 'radial-gradient(60% 40% at 20% 12%, #7dffd6 0, transparent 60%), radial-gradient(70% 50% at 85% 50%, #2a8cff 0, transparent 64%), radial-gradient(70% 45% at 25% 95%, #1fd1b5 0, transparent 62%), #06284a' },
-    bloom:    { name: 'Bloom',    css: 'radial-gradient(60% 40% at 80% 12%, #ffd1e8 0, transparent 60%), radial-gradient(70% 50% at 12% 45%, #c9b6ff 0, transparent 62%), radial-gradient(70% 50% at 80% 90%, #ffb59a 0, transparent 64%), #6a4fa8' },
-    graphite: { name: 'Graphite', css: 'radial-gradient(70% 45% at 25% 15%, #5a6173 0, transparent 62%), radial-gradient(70% 50% at 85% 85%, #3a4a6a 0, transparent 66%), #12141a' }
-  };
 
   function applyWall() {
     var w = $('wall'), l = $('lsWall'), bg;
-    if (cfg.wall === 'system') { w.style.background = SCRIM; l.style.background = WALLS.aurora.css; $('ls').style.background = '#101018'; return; }
-    if (cfg.wall === 'custom' && customWall()) bg = SCRIM + ', url("' + customWall() + '") center/cover';
-    else bg = SCRIM + ', ' + (WALLS[cfg.wall] || WALLS.aurora).css;
-    w.style.background = bg; l.style.background = bg;
+    w.innerHTML = '';
+    if (cfg.wall === 'system') { w.style.background = SCRIM; l.style.background = WALLS.liquid.css; $('ls').style.background = '#101018'; return; }
+    if (cfg.wall === 'custom' && customWall()) { bg = SCRIM + ', url("' + customWall() + '") center/cover'; w.style.background = bg; l.style.background = bg; return; }
+    var p = WALLS[cfg.wall] || WALLS.liquid;
+    l.style.background = SCRIM + ', ' + p.css;
+    if (p.live) {
+      w.style.background = p.base;
+      p.blobs.forEach(function (b, i) {
+        var d = document.createElement('div'); d.className = 'blob';
+        d.style.left = b[0] + '%'; d.style.top = b[1] + '%';
+        d.style.background = 'radial-gradient(circle, ' + b[4] + ' 0, transparent 62%)';
+        d.style.animationDuration = (16 + i * 5) + 's'; d.style.animationDelay = (-i * 4) + 's';
+        w.appendChild(d);
+      });
+      var sc = document.createElement('div'); sc.className = 'scrim'; w.appendChild(sc);
+    } else w.style.background = SCRIM + ', ' + p.css;
   }
 
   var RADIUS = { squircle: '22%', circle: '50%', square: '10%' };
@@ -287,12 +329,12 @@
   }
 
   /* ---------- Apps ---------- */
-  var GRAD = '<defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5fa2"/><stop offset=".5" stop-color="#8f5cff"/><stop offset="1" stop-color="#2fb7ff"/></linearGradient></defs>';
   var VIRT = {
-    '__apps__':   { name: 'Apps', svg: '<svg viewBox="0 0 48 48"><rect width="48" height="48" fill="#3a3a46"/><rect x="10" y="10" width="12" height="12" rx="3" fill="#fff"/><rect x="26" y="10" width="12" height="12" rx="3" fill="#fff" opacity=".8"/><rect x="10" y="26" width="12" height="12" rx="3" fill="#fff" opacity=".8"/><rect x="26" y="26" width="12" height="12" rx="3" fill="#fff"/></svg>' },
-    '__custom__': { name: 'Customize', svg: '<svg viewBox="0 0 48 48"><rect width="48" height="48" fill="#7c4dff"/><path d="M10 16h28M10 24h28M10 32h28" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".5"/><circle cx="18" cy="16" r="4.5" fill="#fff"/><circle cx="31" cy="24" r="4.5" fill="#fff"/><circle cx="21" cy="32" r="4.5" fill="#fff"/></svg>' },
-    '__ai__':     { name: 'Assistant', svg: '<svg viewBox="0 0 48 48">' + GRAD + '<rect width="48" height="48" fill="#14141c"/><circle cx="24" cy="24" r="13" fill="url(#gg)"/><circle cx="24" cy="24" r="7" fill="#14141c" opacity=".55"/></svg>' }
+    '__apps__':   { name: 'Apps', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="ga" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b6078"/><stop offset="1" stop-color="#1f2030"/></linearGradient></defs><rect width="48" height="48" fill="url(#ga)"/><rect x="10" y="10" width="12" height="12" rx="3.5" fill="#fff" opacity=".95"/><rect x="26" y="10" width="12" height="12" rx="3.5" fill="#fff" opacity=".75"/><rect x="10" y="26" width="12" height="12" rx="3.5" fill="#fff" opacity=".75"/><rect x="26" y="26" width="12" height="12" rx="3.5" fill="#fff" opacity=".95"/></svg>' },
+    '__custom__': { name: 'Customize', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b48bff"/><stop offset="1" stop-color="#4f35e8"/></linearGradient></defs><rect width="48" height="48" fill="url(#gc)"/><path d="M10 16h28M10 24h28M10 32h28" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".45"/><circle cx="18" cy="16" r="4.5" fill="#fff"/><circle cx="31" cy="24" r="4.5" fill="#fff"/><circle cx="21" cy="32" r="4.5" fill="#fff"/></svg>' },
+    '__ai__':     { name: 'Assistant', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5fa2"/><stop offset=".5" stop-color="#8f5cff"/><stop offset="1" stop-color="#2fb7ff"/></linearGradient></defs><rect width="48" height="48" fill="#12121a"/><circle cx="24" cy="24" r="14" fill="url(#gg)"/><circle cx="24" cy="24" r="8" fill="#12121a" opacity=".5"/><circle cx="20" cy="19" r="3" fill="#fff" opacity=".55"/></svg>' }
   };
+  function gradFor(n) { var x = 0; for (var i = 0; i < n.length; i++) x = (x * 31 + n.charCodeAt(i)) % 360; return 'linear-gradient(135deg, hsl(' + x + ',78%,64%), hsl(' + ((x + 45) % 360) + ',78%,46%))'; }
 
   function getApps() {
     if (A) { try { return JSON.parse(A.getApps()); } catch (e) {} }
@@ -303,7 +345,7 @@
   function iconInto(ico, app) {
     var v = VIRT[app.pkg];
     if (v) { ico.innerHTML = v.svg; return; }
-    ico.textContent = app.name.charAt(0).toUpperCase();
+    ico.textContent = app.name.charAt(0).toUpperCase(); ico.style.background = gradFor(app.name);
     if (A) setTimeout(function () {
       var src = A.getIcon(app.pkg);
       if (src) { var img = new Image(); img.src = src; ico.textContent = ''; ico.style.background = 'transparent'; ico.appendChild(img); }
@@ -953,7 +995,8 @@
     if ((m = s.match(/^(?:search|google|look up|search for|find)(?: for)?\s+(.+)$/))) return { actions: [{ do: 'web_search', query: m[1] }] };
     if ((m = s.match(/^(?:go to|open|visit)\s+(\S+\.[a-z]{2,}\S*)$/))) return { actions: [{ do: 'open_url', url: m[1] }] };
 
-    if ((m = s.match(/(?:wallpaper|background).*?(aurora|dusk|lagoon|bloom|graphite|system)/)) || (m = s.match(/(aurora|dusk|lagoon|bloom|graphite) (?:wallpaper|background)/))) return { actions: [{ do: 'customize', setting: 'wallpaper', value: m[1] }] };
+    var WN = Object.keys(WALLS).join('|');
+    if ((m = s.match(new RegExp('(?:wallpaper|background).*?(' + WN + '|system)'))) || (m = s.match(new RegExp('(' + WN + ') (?:wallpaper|background)')))) return { actions: [{ do: 'customize', setting: 'wallpaper', value: m[1] }] };
     if ((m = s.match(/icon size.*?(\d{2})/))) return { actions: [{ do: 'customize', setting: 'icon_size', value: m[1] }] };
     if ((m = s.match(/(4|5|four|five) columns?/))) return { actions: [{ do: 'customize', setting: 'columns', value: /5|five/.test(m[1]) ? 5 : 4 }] };
     if ((m = s.match(/(rounded|squircle|circle|round|square) icons?/))) return { actions: [{ do: 'customize', setting: 'shape', value: m[1] === 'rounded' || m[1] === 'round' ? (m[1] === 'round' ? 'circle' : 'squircle') : m[1] }] };
