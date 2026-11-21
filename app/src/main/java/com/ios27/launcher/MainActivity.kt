@@ -27,6 +27,9 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.AlarmClock
+import android.provider.OpenableColumns
+import java.io.File
+import java.util.concurrent.Executors
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Base64
@@ -55,6 +58,14 @@ class MainActivity : AppCompatActivity() {
     private val iconCache = ConcurrentHashMap<String, String>()
     private var torchOn = false
     private var wasScreenOff = false
+    private val llmExecutor = Executors.newSingleThreadExecutor()
+
+    private fun modelFile() = File(filesDir, "model.litertlm")
+
+    private val pickModel =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) Thread { importModel(uri) }.start()
+        }
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -136,6 +147,10 @@ class MainActivity : AppCompatActivity() {
             unregisterReceiver(screenReceiver)
         } catch (_: Exception) {
         }
+        try {
+            LocalLlm.release()
+        } catch (_: Throwable) {
+        }
         super.onDestroy()
     }
 
@@ -149,6 +164,53 @@ class MainActivity : AppCompatActivity() {
             lp.preferredDisplayModeId = best.modeId
             window.attributes = lp
         } catch (_: Exception) {
+        }
+    }
+
+    /** Copies the model file you pick into the app's private storage (llama-style models are large, so this shows progress). */
+    private fun importModel(uri: Uri) {
+        fun js(code: String) = runOnUiThread { webView.evaluateJavascript(code, null) }
+        val tmp = File(filesDir, "model.tmp")
+        try {
+            var name = "model.litertlm"
+            var total = 0L
+            contentResolver.query(uri, null, null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    val ni = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (ni >= 0) name = c.getString(ni) ?: name
+                    val si = c.getColumnIndex(OpenableColumns.SIZE)
+                    if (si >= 0 && !c.isNull(si)) total = c.getLong(si)
+                }
+            }
+            var done = 0L
+            var lastPct = -1
+            contentResolver.openInputStream(uri)?.use { input ->
+                tmp.outputStream().use { out ->
+                    val buf = ByteArray(1 shl 20)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        if (total > 0) {
+                            val pct = (done * 100 / total).toInt()
+                            if (pct != lastPct) {
+                                lastPct = pct
+                                js("window.onModelProgress($pct)")
+                            }
+                        }
+                    }
+                }
+            } ?: throw IllegalStateException("Couldn't open that file")
+            LocalLlm.release()
+            val dest = modelFile()
+            if (dest.exists()) dest.delete()
+            if (!tmp.renameTo(dest)) throw IllegalStateException("Couldn't save the model")
+            getSharedPreferences("llm", MODE_PRIVATE).edit().putString("name", name).apply()
+            js("window.onModelReady(" + JSONObject.quote(name) + ")")
+        } catch (t: Throwable) {
+            tmp.delete()
+            js("window.onModelError(" + JSONObject.quote(t.message ?: "Import failed") + ")")
         }
     }
 
@@ -590,6 +652,56 @@ class MainActivity : AppCompatActivity() {
         fun getBattery(): Int {
             val bm = getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
             return bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        }
+
+        @JavascriptInterface
+        fun llmStatus(): String {
+            val f = modelFile()
+            return JSONObject()
+                .put("built", LocalLlm.BUILT)
+                .put("installed", f.exists())
+                .put("name", getSharedPreferences("llm", MODE_PRIVATE).getString("name", "") ?: "")
+                .put("mb", f.length() / 1048576L)
+                .toString()
+        }
+
+        @JavascriptInterface
+        fun llmPick() {
+            runOnUiThread {
+                try {
+                    pickModel.launch(arrayOf("*/*"))
+                } catch (_: Exception) {
+                    toast("No file picker available")
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun llmRemove() {
+            llmExecutor.execute {
+                try {
+                    LocalLlm.release()
+                } catch (_: Throwable) {
+                }
+                modelFile().delete()
+                runOnUiThread { webView.evaluateJavascript("window.onModelRemoved()", null) }
+            }
+        }
+
+        /** Runs the imported model on the phone (no internet) and returns the text through window.onLocal. */
+        @JavascriptInterface
+        fun llmAsk(id: Int, prompt: String) {
+            llmExecutor.execute {
+                var text = ""
+                var err = ""
+                try {
+                    text = LocalLlm.generate(modelFile().absolutePath, prompt)
+                } catch (t: Throwable) {
+                    err = t.message ?: t.javaClass.simpleName
+                }
+                val js = "window.onLocal(" + id + "," + JSONObject.quote(text) + "," + JSONObject.quote(err) + ")"
+                runOnUiThread { webView.evaluateJavascript(js, null) }
+            }
         }
     }
 }

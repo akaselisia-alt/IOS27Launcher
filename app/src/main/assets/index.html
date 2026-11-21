@@ -16,8 +16,10 @@
   #clock { text-align: center; padding: 12px 0 2px; flex: none; filter: drop-shadow(0 2px 8px rgba(0,0,0,.25)); }
   /* Same tall, upright, stretched clock as the lock screen */
   #time, #lsTime { display: inline-block; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; font-style: normal; transform-origin: 50% 0; background: linear-gradient(180deg, rgba(255,255,255,.98) 10%, rgba(255,255,255,.58) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
-  #time { font-size: 58px; letter-spacing: -3px; transform: scaleY(1.45); margin-bottom: 26px; }
-  #date { font-size: 15px; font-weight: 600; opacity: .92; letter-spacing: .2px; }
+  :root { --clk: 100px; }
+  @media (max-height: 720px) { :root { --clk: 82px; } }
+  #time, #lsTime { font-size: var(--clk); letter-spacing: calc(var(--clk) * -0.05); transform: scaleY(1.5); margin-bottom: calc(var(--clk) * .5); }
+  #date, #lsDate { font-size: 18px; font-weight: 600; opacity: .92; letter-spacing: .2px; }
 
   #pages { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-behavior: smooth; overscroll-behavior: contain; scrollbar-width: none; }
   #pages::-webkit-scrollbar { display: none; }
@@ -120,14 +122,20 @@
   #aiSend { background: #0a84ff !important; }
 
   /* Lock screen */
-  #ls { position: fixed; inset: 0; z-index: 20; display: none; transform: translate3d(0,0,0); transition: transform .5s var(--ease); background: #101018; overflow: hidden; touch-action: none; will-change: transform; }
+  #ls { position: fixed; inset: 0; z-index: 20; display: none; transform: translate3d(0,0,0); transition: transform .55s var(--ease), filter .55s var(--ease), opacity .5s var(--ease); background: #101018; overflow: hidden; touch-action: none; will-change: transform; }
   #ls.show { display: block; }
+  #ls.leaving { transform: translate3d(0,-10%,0) scale(1.06); filter: blur(36px); opacity: 0; }
+  /* Home screen is blurred and slightly zoomed while locked, then sharpens as you unlock */
+  #clock, #pages, #dots, #dock { transition: filter .6s var(--ease), transform .6s var(--ease), opacity .5s var(--ease); }
+  body.locked #pages, body.locked #dots, body.locked #dock { filter: blur(calc(20px * (1 - var(--p, 0)))); transform: scale(calc(1.07 - .07 * var(--p, 0))); opacity: calc(.55 + .45 * var(--p, 0)); }
+  body.locked #clock { filter: drop-shadow(0 2px 8px rgba(0,0,0,.25)) blur(calc(20px * (1 - var(--p, 0)))); transform: scale(calc(1.07 - .07 * var(--p, 0))); opacity: calc(.55 + .45 * var(--p, 0)); }
+  body.unlocking #pages, body.unlocking #dots, body.unlocking #dock { filter: blur(0px); transform: none; opacity: 1; }
+  body.unlocking #clock { filter: drop-shadow(0 2px 8px rgba(0,0,0,.25)) blur(0px); transform: none; opacity: 1; }
+  body.dragging #clock, body.dragging #pages, body.dragging #dots, body.dragging #dock { transition: none; }
   #lsWall { position: absolute; inset: 0; background-size: cover; background-position: center; }
   #lsTop { position: absolute; top: 8%; left: 0; right: 0; text-align: center; filter: drop-shadow(0 2px 14px rgba(0,0,0,.25)); }
   #lsLock { height: 20px; margin-bottom: 8px; opacity: .9; }
   #lsLock svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  #lsDate { font-size: 19px; font-weight: 600; opacity: .92; letter-spacing: .2px; }
-  #lsTime { font-size: 100px; letter-spacing: -5px; transform: scaleY(1.5); margin-bottom: 50px; }
   #lsBtns { position: absolute; left: 0; right: 0; bottom: 74px; display: flex; justify-content: space-between; padding: 0 44px; }
   .gl { width: 54px; height: 54px; border-radius: 50%; background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.3); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; transition: transform .3s var(--spring), background .2s; }
   .gl:active { transform: scale(.9); }
@@ -142,7 +150,7 @@
 <body>
   <div id="wall"></div>
   <div id="grab"></div>
-  <div id="clock"><div id="time"></div><div id="date"></div></div>
+  <div id="clock"><div id="date"></div><div id="time"></div></div>
   <div id="pages"></div>
   <div id="dots"></div>
   <div id="dock"></div>
@@ -165,7 +173,16 @@
   <!-- Assistant -->
   <div id="ai" class="sheet">
     <div class="done" id="aiDone">Done</div>
+    <div id="aiGear">&#9881;&#xFE0E;</div>
     <h2>Assistant</h2>
+    <div id="aiSet">
+      <div class="card">
+        <div class="row"><span>On-device AI</span><span id="llmState" style="opacity:.75;font-size:13px"></span></div>
+        <div class="row"><span>Use it when I don't understand</span><div class="sw" id="llmOn"></div></div>
+        <div class="row"><button class="pill" id="llmPick">Import model file</button><button class="pill" id="llmDel">Remove model</button></div>
+        <div class="small" id="llmHelp"></div>
+      </div>
+    </div>
     <div id="aiLog"></div>
     <div id="aiBar"><input id="aiIn" type="text" placeholder="Tell me what to do..." autocomplete="off"><button id="aiMic">&#127908;</button><button id="aiSend">&#8593;</button></div>
   </div>
@@ -576,17 +593,20 @@
   }
 
   /* ---------- Lock screen ---------- */
-  var locked = false, torchLS = false;
+  var locked = false, torchLS = false, B = document.body;
   function showLock() {
     if (locked) return;
     locked = true; tick(); closeAll();
-    ls.style.transition = 'none'; ls.style.transform = 'translate3d(0,0,0)';
-    ls.classList.add('show');
-    void ls.offsetWidth; ls.style.transition = '';
+    B.style.setProperty('--p', 0); B.classList.remove('unlocking', 'dragging'); B.classList.add('locked');
+    ls.classList.remove('leaving'); ls.style.transition = 'none'; ls.style.transform = ''; ls.style.filter = ''; ls.style.opacity = '';
+    ls.classList.add('show'); void ls.offsetWidth; ls.style.transition = '';
   }
   function unlock() {
-    ls.style.transition = ''; ls.style.transform = 'translate3d(0,-105%,0)';
-    setTimeout(function () { ls.classList.remove('show'); ls.style.transform = ''; locked = false; }, 520);
+    B.classList.remove('dragging', 'locked'); B.classList.add('unlocking');
+    ls.style.transition = ''; ls.style.transform = ''; ls.style.filter = ''; ls.style.opacity = '';
+    ls.classList.add('leaving');                       // lock screen blurs, zooms and fades away
+    setTimeout(function () { B.style.setProperty('--p', 0); }, 30);
+    setTimeout(function () { ls.classList.remove('show', 'leaving'); B.classList.remove('unlocking'); locked = false; }, 680);
   }
   function doLock() {
     hide(cc);
@@ -594,18 +614,29 @@
     if (A) { var s = readStates(); if (s.a11y) setTimeout(function () { A.globalAction('lock'); }, 450); }
   }
   var ly = 0, lt = 0, lsDrag = false;
-  ls.addEventListener('touchstart', function (e) { ly = e.touches[0].clientY; lt = Date.now(); lsDrag = true; ls.style.transition = 'none'; }, { passive: true });
+  ls.addEventListener('touchstart', function (e) { ly = e.touches[0].clientY; lt = Date.now(); lsDrag = true; ls.style.transition = 'none'; B.classList.add('dragging'); }, { passive: true });
   ls.addEventListener('touchmove', function (e) {
     if (!lsDrag) return;
     var dy = Math.min(0, e.touches[0].clientY - ly);
-    ls.style.transform = 'translate3d(0,' + dy + 'px,0)';
+    var p = Math.min(1, -dy / (window.innerHeight * 0.5));
+    ls.style.transform = 'translate3d(0,' + (dy * 0.5) + 'px,0) scale(' + (1 + p * 0.04) + ')';
+    ls.style.filter = 'blur(' + (p * 26) + 'px)';
+    ls.style.opacity = String(1 - p * 0.85);
+    B.style.setProperty('--p', p);                     // home screen un-blurs in step with your finger
   }, { passive: true });
+  function lsRelease(unlockOk) {
+    lsDrag = false; ls.style.transition = ''; B.classList.remove('dragging');
+    if (unlockOk) { unlock(); return; }
+    ls.style.transform = 'translate3d(0,0,0)'; ls.style.filter = 'blur(0px)'; ls.style.opacity = '1';
+    B.style.setProperty('--p', 0);
+    setTimeout(function () { if (locked) { ls.style.transform = ''; ls.style.filter = ''; ls.style.opacity = ''; } }, 650);
+  }
   ls.addEventListener('touchend', function (e) {
-    if (!lsDrag) return; lsDrag = false;
+    if (!lsDrag) return;
     var dy = e.changedTouches[0].clientY - ly, v = -dy / Math.max(1, Date.now() - lt);
-    ls.style.transition = '';
-    if (dy < -140 || (dy < -50 && v > 0.6)) unlock(); else ls.style.transform = 'translate3d(0,0,0)';
+    lsRelease(dy < -140 || (dy < -50 && v > 0.6));
   });
+  ls.addEventListener('touchcancel', function () { if (lsDrag) lsRelease(false); });
   $('lsTorch').addEventListener('click', function () {
     if (!A) return; A.toggle('torch'); torchLS = !torchLS; this.classList.toggle('on', torchLS);
   });
@@ -680,7 +711,7 @@
     var log = $('aiLog'); log.appendChild(b); log.scrollTop = log.scrollHeight; return b;
   }
   function openAI() {
-    closeAll();
+    closeAll(); llmRefresh();
     if (!introShown) { introShown = true; bubble('Hi! I run fully offline on your phone. Tell me what to do, or say "help" for examples.', 'bot'); }
     show(ai);
   }
@@ -689,19 +720,73 @@
   $('aiSend').onclick = sendAI;
   $('aiIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendAI(); });
 
+
+  /* ---------- Optional on-device AI model (AI APK only) ---------- */
+  var llm = { built: false, installed: false, name: '', mb: 0 };
+  var llmOn = true; try { llmOn = localStorage.getItem('ios27llmOn') !== '0'; } catch (e) {}
+  function llmRefresh() {
+    if (A) { try { llm = JSON.parse(A.llmStatus()); } catch (e) {} }
+    var s = $('llmState'), t = $('llmHelp');
+    if (!llm.built) {
+      s.textContent = 'Not in this APK';
+      t.textContent = 'This build has no AI engine. Install IOS27Launcher-AI.apk from the GitHub Releases page to use an on-device model.';
+    } else if (!llm.installed) {
+      s.textContent = 'No model yet';
+      t.textContent = 'Download a small .litertlm model (for example Gemma 3 1B) from huggingface.co/litert-community, then tap Import model file. It needs 1–2 GB of free space and runs fully offline.';
+    } else {
+      s.textContent = (llm.name || 'model') + ' · ' + llm.mb + ' MB';
+      t.textContent = 'Runs on your phone with no internet. The first answer is slower while the model loads.';
+    }
+    sw($('llmOn'), llmOn, function (v) { llmOn = v; try { localStorage.setItem('ios27llmOn', v ? '1' : '0'); } catch (e) {} });
+  }
+  $('aiGear').onclick = function () { $('aiSet').classList.toggle('open'); llmRefresh(); };
+  $('llmPick').onclick = function () { if (!A) return; if (!llm.built) { msg('This APK has no AI engine'); return; } A.llmPick(); };
+  $('llmDel').onclick = function () { if (A && llm.installed) A.llmRemove(); };
+  window.onModelProgress = function (p) { $('llmState').textContent = 'Importing… ' + p + '%'; };
+  window.onModelReady = function () { llmRefresh(); msg('Model ready'); };
+  window.onModelError = function (e) { llmRefresh(); msg('Import failed: ' + e); };
+  window.onModelRemoved = function () { llmRefresh(); };
+
+  var pend = {}, reqN = 0;
+  function llmPrompt(text) {
+    return 'You are the assistant inside an Android phone launcher. Reply with ONE JSON object and nothing else: {"say":"short reply","actions":[...]}.\n' +
+      'Each action has a "do" field: open_app{name} toggle{name:torch|dnd|silent|rotate,on:true|false} brightness{percent} volume{percent} media{key:play|next|prev} ' +
+      'system{what:lock|screenshot|power|recents|notifications|quick} shortcut{name:wifi|bt|data|air|display|location|hotspot|saver|nfc|settings|camera|calc|clock} ' +
+      'dial{number} web_search{query} maps{query} alarm{hour,minute} timer{seconds} show{what:control_center|app_library|customize|recents|lock_screen} customize{setting,value}.\n' +
+      'For questions or chat, answer in "say" and use "actions":[].\n\n' +
+      'User: open the camera and turn on the torch\n{"say":"Opening the camera.","actions":[{"do":"open_app","name":"Camera"},{"do":"toggle","name":"torch","on":true}]}\n' +
+      'User: why is the sky blue\n{"say":"Air scatters blue sunlight more than red, so the sky looks blue.","actions":[]}\n' +
+      'User: ' + text + '\n';
+  }
+  function parseJSON(t) { try { var a = t.indexOf('{'), b = t.lastIndexOf('}'); return JSON.parse(t.slice(a, b + 1)); } catch (e) { return null; } }
+  function askLocal(text, fallback) {
+    var wait = bubble('Thinking… (the first answer can take a while)', 'bot');
+    var id = ++reqN;
+    pend[id] = function (out, err) {
+      if (wait.parentNode) wait.parentNode.removeChild(wait);
+      if (err) { bubble('The on-device model had a problem: ' + err, 'bot'); reply(fallback, text); return; }
+      var r = parseJSON(out);
+      if (r && (r.actions || r.say)) { r.actions = Array.isArray(r.actions) ? r.actions : []; reply(r, text); }
+      else reply({ say: String(out).trim() || 'I\'m not sure.', actions: [] }, text);
+    };
+    A.llmAsk(id, llmPrompt(text));
+  }
+  window.onLocal = function (id, out, err) { var f = pend[id]; if (f) { delete pend[id]; f(out, err); } };
+
   function sendAI() {
     var inp = $('aiIn'), text = inp.value.trim(); if (!text) return;
     inp.value = ''; bubble(text, 'me');
-    reply(local(text), text);
+    var r = local(text);
+    if (r.unknown && A && llm.built && llm.installed && llmOn) askLocal(text, r); else reply(r, text);
   }
 
   function reply(res, userText) {
     var out = [];
     (res.actions || []).slice(0, 8).forEach(function (a) {
-      var f = ACT[a['do']];
+      var f = Object.prototype.hasOwnProperty.call(ACT, a['do']) ? ACT[a['do']] : null;
       try { out.push(f ? f(a) : 'I can\'t do "' + a['do'] + '".'); } catch (e) { out.push('That didn\'t work: ' + e.message); }
     });
-    var said = res.say || '';
+    var said = res.say ? String(res.say) : '';
     var results = out.filter(Boolean).join('\n');
     bubble((said && results ? said + '\n' + results : (said || results || 'Done.')), 'bot');
   }
@@ -885,7 +970,7 @@
     if (SHORT[s]) return { actions: [{ do: 'shortcut', name: SHORT[s] }] };
     var direct = findApp(s);
     if (direct && s.split(' ').length <= 3) return { actions: [{ do: 'open_app', name: s }] };
-    return { say: 'I didn\'t get that. Say "help" to see what I understand.', actions: [] };
+    return { unknown: true, say: 'I didn\'t get that. Say "help" to see what I understand.', actions: [] };
   }
 
 

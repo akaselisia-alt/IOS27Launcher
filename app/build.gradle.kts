@@ -15,6 +15,18 @@ android {
         versionName = "1.0"
     }
 
+    // "standard" = the stable launcher. "ai" = same launcher plus an on-device AI engine (needs Android 8+).
+    flavorDimensions += "engine"
+    productFlavors {
+        create("standard") {
+            dimension = "engine"
+        }
+        create("ai") {
+            dimension = "engine"
+            minSdk = 26
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -34,7 +46,15 @@ android {
     }
 }
 
+// The AI engine is compiled only into the "ai" variant, so a problem there can never break the standard APK.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    if (name.contains("Ai")) {
+        compilerOptions.freeCompilerArgs.add("-Xskip-metadata-version-check")
+    }
+}
+
 dependencies {
+    add("aiImplementation", "com.google.ai.edge.litertlm:litertlm-android:latest.release")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
