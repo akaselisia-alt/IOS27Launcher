@@ -50,6 +50,8 @@
   /* Overlays: GPU-only transitions (transform + opacity), no blur on big layers */
   .sheet { position: fixed; inset: 0; z-index: 10; display: none; background: rgba(14,14,22,.9); overflow-y: auto; padding: 16px 16px 40px; opacity: 0; transform: translate3d(0, 28px, 0) scale(.975); transition: opacity .22s var(--ease), transform .36s var(--spring); will-change: transform, opacity; overscroll-behavior: contain; }
   .sheet.show { display: block; }
+  #st { padding: 0; overflow: hidden; background: #000; }
+  #stHost { position: absolute; inset: 0; display: block; }
   .sheet.in { opacity: 1; transform: none; }
   .sheet h2 { margin: 4px 0 14px; font-size: 17px; font-weight: 600; text-align: center; }
   .done { position: absolute; right: 16px; top: 16px; font-size: 14px; color: #7cc4ff; padding: 6px; }
@@ -193,34 +195,8 @@
     <div id="aiBar"><input id="aiIn" type="text" placeholder="Tell me what to do..." autocomplete="off"><button id="aiMic">&#127908;</button><button id="aiSend">&#8593;</button></div>
   </div>
 
-  <!-- Settings app: launcher account + server -->
-  <div id="st" class="sheet">
-    <div class="done" id="stDone">Done</div>
-    <h2>Settings</h2>
-
-    <div class="sec">Launcher account</div>
-    <div class="card" id="stAccount"></div>
-    <div class="small">No Google account needed. Your launcher ID works only with your own server and syncs your layout, wallpaper choice, icon style, dock and hidden apps (not photos).</div>
-
-    <div class="sec" id="stServerSec">Server</div>
-    <div class="card" id="stServerCard">
-      <div class="row"><span>Address</span><input id="stServer" type="text" placeholder="https://your-server.example.com" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
-      <div class="row"><button class="pill" id="stSave">Save</button><button class="pill" id="stTest">Test connection</button></div>
-      <div class="small" id="stServerMsg"></div>
-    </div>
-
-    <div class="sec">Launcher</div>
-    <div class="card">
-      <div class="row" id="stCust"><span>Customize</span><span style="opacity:.6">&rsaquo;</span></div>
-      <div class="row" id="stAsst"><span>Assistant &amp; on-device AI</span><span style="opacity:.6">&rsaquo;</span></div>
-      <div class="row"><span>iOS lock screen after unlock</span><div class="sw" id="stLock"></div></div>
-      <div class="row"><span>Screen refresh rate</span><span id="stHz" style="opacity:.75;font-size:13px"></span></div>
-    </div>
-
-    <div class="small" id="stVer" style="text-align:center;margin-top:14px"></div>
-    <div class="sec">Privacy</div>
-    <div class="card"><div class="small" style="padding:12px 14px">The launcher and the assistant work fully offline. The internet is used only when you sign in to your own server: your password is sent to it over HTTPS and the server keeps only a salted hash. The sign-in token stays inside the app.</div></div>
-  </div>
+  <!-- Settings app (built in script, inside a shadow root) -->
+  <div id="st" class="sheet"><div id="stHost"></div></div>
 
   <!-- Customize app -->
   <div id="cz" class="sheet">
@@ -478,12 +454,12 @@
     setTimeout(function () {
       if (el.classList.contains('in')) return;
       el.classList.remove('show');
-      if (el === stg) $('stAccount').innerHTML = '';   // don't leave typed passwords in the page
+      if (el === stg) { stShadow.innerHTML = ''; stack = []; }
     }, 300);
   }
   function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai) || isOpen(stg); }
   function closeAll() { [lib, cz, cc, rc, ai, stg].forEach(hide); }
-  ['libDone', 'czDone', 'rcDone', 'aiDone', 'stDone'].forEach(function (id) { $(id).addEventListener('click', closeAll); });
+  ['libDone', 'czDone', 'rcDone', 'aiDone'].forEach(function (id) { $(id).addEventListener('click', closeAll); });
 
   function openLib() {
     closeAll();
@@ -933,7 +909,7 @@
       }
       return 'I can\'t do that.';
     },
-    shortcut: function (a) { needA(); closeAll(); A.shortcut(a.name); return 'Opening ' + a.name + ' settings.'; },
+    shortcut: function (a) { needA(); closeAll(); A.shortcut(a.name); return 'Opening ' + (a.name === 'settings' ? 'phone' : a.name) + ' settings.'; },
     dial: function (a) { needA(); A.act('dial', String(a.number), ''); return 'Opening the dialer for ' + a.number + '. Press call to confirm.'; },
     sms: function (a) { needA(); A.act('sms', String(a.number), String(a.text || '')); return 'Message ready to send to ' + a.number + '.'; },
     open_url: function (a) { needA(); A.act('url', String(a.url), ''); return 'Opening ' + a.url; },
@@ -1125,157 +1101,467 @@
     });
   }
 
-  function acctRefresh() {
-    if (A) { try { acct = JSON.parse(A.acctState()); } catch (e) {} }
-    if (isOpen(stg)) renderAccount();
+
+  /* ---------- Settings app (iOS-style, flat). Lives in a shadow root so its styles can't clash with the launcher ---------- */
+  var ST_CSS = `
+:host {
+  --bg: #F2F2F7; --card: #FFFFFF; --text: #000000; --sub: #6D6D72; --line: #C6C6C8; --tint: #007AFF;
+  --off: #E9E9EA; --knob: #FFFFFF; --green: #34C759; --press: #E5E5EA; --fs: 17px;
+}
+:host([data-dark="1"]) {
+  --bg: #000000; --card: #1C1C1E; --text: #FFFFFF; --sub: #8E8E93; --line: #38383A; --tint: #0A84FF;
+  --off: #39393D; --green: #30D158; --press: #2C2C2E;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+:host { display: block; position: absolute; inset: 0; background: var(--bg); color: var(--text); font: 400 var(--fs)/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; }
+* { -webkit-tap-highlight-color: transparent; }
+#app { position: absolute; inset: 0; overflow: hidden; }
+.act { position: absolute; right: 0; top: env(safe-area-inset-top); height: 44px; padding: 0 16px; display: flex; align-items: center; color: var(--tint); font-weight: 600; cursor: pointer; z-index: 3; }
+.row.tint .l { color: var(--tint); }
+.row.red .l { color: #FF3B30; }
+.who { width: 56px; height: 56px; border-radius: 50%; background: #8E8E93; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 600; flex: none; margin-left: -4px; }
+.row.big { min-height: 76px; }
+.sub { color: var(--sub); font-size: 13px; }
+input.fld { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; text-align: right; user-select: text; -webkit-user-select: text; }
+.rc { font-size: 20px; font-weight: 600; letter-spacing: 1px; user-select: all; -webkit-user-select: all; word-break: break-all; }
+
+/* ---- pages (stack, simple slide, no spring) ---- */
+.page { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column;
+  transform: translateX(100%); transition: transform .3s cubic-bezier(.25,.1,.25,1); will-change: transform; }
+.page.on { transform: translateX(0); }
+.page.under { transform: translateX(-30%); }
+.page.root { transform: none; }
+.page.root.under { transform: translateX(-30%); }
+
+.bar { height: calc(44px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); flex: none; position: relative;
+  display: flex; align-items: center; background: var(--bg); z-index: 2; }
+.bar::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: .5px; background: var(--line); opacity: 0; }
+.bar.line::after { opacity: 1; }
+.bar .t { position: absolute; left: 0; right: 0; text-align: center; font-weight: 600; opacity: 0; pointer-events: none; }
+.bar.line .t { opacity: 1; }
+.back { display: flex; align-items: center; color: var(--tint); padding: 0 8px; height: 44px; cursor: pointer; z-index: 1; }
+.back svg { width: 13px; height: 22px; margin-right: 6px; }
+.scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 16px calc(32px + env(safe-area-inset-bottom)); }
+h1 { font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: .3px; padding: 4px 0 18px; }
+
+/* ---- grouped lists ---- */
+.grp { background: var(--card); border-radius: 10px; margin: 0 0 22px; overflow: hidden; }
+.cap { font-size: 13px; color: var(--sub); text-transform: uppercase; padding: 0 16px 6px; margin-top: -10px; letter-spacing: -.1px; }
+.foot { font-size: 13px; color: var(--sub); padding: 0 16px; margin: -14px 0 22px; line-height: 1.35; }
+.row { min-height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 12px; position: relative; }
+.row + .row::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: var(--line); }
+.row.tap { cursor: pointer; }
+.row.tap:active { background: var(--press); }
+.row .l { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .v { color: var(--sub); white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.chev { width: 8px; height: 14px; flex: none; color: #C4C4C7; }
+.ico { width: 30px; height: 30px; border-radius: 7px; flex: none; display: flex; align-items: center; justify-content: center; margin-left: -4px; }
+.ico svg { width: 18px; height: 18px; fill: #fff; }
+.check { color: var(--tint); font-weight: 600; font-size: 20px; }
+.row.col { flex-direction: column; align-items: stretch; justify-content: center; padding-top: 10px; padding-bottom: 10px; gap: 6px; }
+
+/* ---- controls ---- */
+.sw { width: 51px; height: 31px; border-radius: 16px; background: var(--off); position: relative; flex: none; cursor: pointer; transition: background .2s ease; }
+.sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 50%; background: var(--knob); transition: transform .2s ease; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.sw.on { background: var(--green); }
+.sw.on::after { transform: translateX(20px); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; outline: none; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(var(--tint), var(--tint)) 0/var(--fill, 50%) 100% no-repeat, var(--off); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #fff; margin-top: -12px; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.seg { display: flex; background: var(--off); border-radius: 9px; padding: 2px; }
+.seg div { flex: 1; text-align: center; padding: 6px 0; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; }
+.seg div.on { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+input.txt { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--sub); font: inherit; text-align: right; user-select: text; -webkit-user-select: text; }
+.bat { width: 24px; height: 12px; border: 1.5px solid var(--sub); border-radius: 4px; position: relative; flex: none; }
+.bat i { position: absolute; inset: 1px; background: var(--green); border-radius: 2px; }
+.meter { height: 8px; border-radius: 4px; background: var(--off); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--tint); }
+.preview { font-size: var(--fs); padding: 12px 16px; line-height: 1.35; }
+`;
+  var stHost = $('stHost'), stShadow = stHost.attachShadow({ mode: 'open' }), stApp = null, stack = [];
+  var stPref = (function () { try { return Object.assign({ appearance: 'auto', textSize: 17, bold: false }, JSON.parse(localStorage.getItem('ios27st') || '{}')); } catch (e) { return { appearance: 'auto', textSize: 17, bold: false }; } })();
+  function stPrefSave() { try { localStorage.setItem('ios27st', JSON.stringify(stPref)); } catch (e) {} }
+  var stMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function stTheme() {
+    var dark = stPref.appearance === 'dark' || (stPref.appearance === 'auto' && (!stMq || stMq.matches));
+    stHost.setAttribute('data-dark', dark ? '1' : '0');
+    stHost.style.setProperty('--fs', stPref.textSize + 'px');
+    stHost.style.fontWeight = stPref.bold ? '600' : '400';
+  }
+  if (stMq && stMq.addEventListener) stMq.addEventListener('change', stTheme);
+  function E(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var CHEV = '<svg class="chev" viewBox="0 0 8 14"><path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var BACKI = '<svg viewBox="0 0 13 22"><path d="M11 2L2 11l9 9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function sico(color, path) { return '<div class="ico" style="background:' + color + '"><svg viewBox="0 0 24 24"><path d="' + path + '"/></svg></div>'; }
+  var SP = {
+    wifi: 'M12 18.5a1.8 1.8 0 100 3.6 1.8 1.8 0 000-3.6zM12 4C7.9 4 4.2 5.6 1.5 8.3l1.9 1.9C5.6 8 8.6 6.7 12 6.7s6.4 1.3 8.6 3.5l1.9-1.9C19.8 5.6 16.1 4 12 4zm0 5.7c-2.6 0-5 1-6.7 2.8l1.9 1.9c1.2-1.3 3-2 4.8-2s3.6.7 4.8 2l1.9-1.9C17 10.7 14.6 9.7 12 9.7z',
+    bt: 'M13 2v7.6L8.4 5 7 6.4 11.6 11 7 15.6 8.4 17l4.6-4.6V22l6-6-4.2-5L19 6l-6-4zm2 4.8l1.2 1.2L15 9.2V6.8zm0 8l1.2 1.2L15 17.2v-2.4z',
+    disp: 'M12 7a5 5 0 100 10 5 5 0 000-10zM11 1h2v3h-2zM11 20h2v3h-2zM1 11h3v2H1zM20 11h3v2h-3z',
+    snd: 'M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8v8a4.5 4.5 0 002.5-4zM14 3.2v2.1a7 7 0 010 13.4v2.1a9 9 0 000-17.6z',
+    notif: 'M12 22a2.5 2.5 0 002.5-2.5h-5A2.5 2.5 0 0012 22zm7-6v-5c0-3.1-1.6-5.6-4.5-6.3V4a2.5 2.5 0 00-5 0v.7C6.6 5.4 5 7.9 5 11v5l-2 2v1h18v-1l-2-2z',
+    bat: 'M16 4h-2V2h-4v2H8a2 2 0 00-2 2v14a2 2 0 002 2h8a2 2 0 002-2V6a2 2 0 00-2-2zm-3 14v-4h2l-4 6v-4H9l4-6v4z',
+    stor: 'M4 6a2 2 0 012-2h12a2 2 0 012 2v4H4V6zm0 6h16v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6zm12 2.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z',
+    about: 'M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z',
+    plane: 'M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z',
+    app: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+    ai: 'M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z',
+    lock: 'M18 8h-1V6a5 5 0 00-10 0v2H6a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V10a2 2 0 00-2-2zm-6 9a2 2 0 110-4 2 2 0 010 4zm3.1-9H8.9V6a3.1 3.1 0 016.2 0v2z',
+    key: 'M12.7 10a5 5 0 10-1.4 2H15v2h2v-2h2v-2h-6.3zM7 11a2 2 0 110-4 2 2 0 010 4z',
+    sig: 'M2 20h3v-4H2zm5 0h3V12H7zm5 0h3V8h-3zm5 0h3V3h-3z',
+    hz: 'M3 12h4l2-6 4 12 2-6h6'
+  };
+  function stSt() { return A ? readStates() : {}; }
+
+  function stPush(build) {
+    var page = build();
+    stApp.appendChild(page.el);
+    var below = stack[stack.length - 1];
+    void page.el.offsetWidth;
+    page.el.classList.add('on');
+    if (below) below.el.classList.add('under');
+    stack.push(page);
+    return page;
+  }
+  function stPop() {
+    if (stack.length < 2) return false;
+    var top = stack.pop(), below = stack[stack.length - 1];
+    top.el.classList.remove('on'); below.el.classList.remove('under');
+    setTimeout(function () { if (top.el.parentNode) top.el.parentNode.removeChild(top.el); }, 320);
+    return true;
+  }
+  function stPage(title, big, isRoot) {
+    var page = E('div', 'page' + (isRoot ? ' root' : ''));
+    var bar = E('div', 'bar');
+    if (isRoot) {
+      var d = E('div', 'act', 'Done'); d.onclick = function () { hide(stg); }; page.appendChild(d);
+    } else {
+      var b = E('div', 'back', BACKI + '<span>' + esc(stack.length ? stack[stack.length - 1].title : 'Settings') + '</span>'); b.onclick = stPop; bar.appendChild(b);
+    }
+    bar.appendChild(E('div', 't', esc(title)));
+    var sc = E('div', 'scroll'); sc.appendChild(E('h1', '', esc(big || title)));
+    page.appendChild(bar); page.appendChild(sc);
+    var tk = false;
+    sc.addEventListener('scroll', function () { if (tk) return; tk = true; requestAnimationFrame(function () { tk = false; bar.classList.toggle('line', sc.scrollTop > 40); }); }, { passive: true });
+    return { el: page, body: sc, title: title };
+  }
+  function grp(parent, cap, foot) {
+    if (cap) parent.appendChild(E('div', 'cap', esc(cap)));
+    var g = E('div', 'grp'); parent.appendChild(g);
+    if (foot) parent.appendChild(E('div', 'foot', esc(foot)));
+    return g;
+  }
+  function sSwitch(g, label, get, change, ic) {
+    var r = E('div', 'row', (ic || '') + '<span class="l">' + esc(label) + '</span>');
+    var s = E('div', 'sw' + (get() ? ' on' : ''));
+    s.onclick = function () { var v = !s.classList.contains('on'); s.classList.toggle('on', v); change(v); };
+    r.appendChild(s); g.appendChild(r); return { row: r, sw: s };
+  }
+  function sNav(g, label, value, go, ic) {
+    var r = E('div', 'row tap', (ic || '') + '<span class="l">' + esc(label) + '</span>' + (value != null ? '<span class="v">' + esc(value) + '</span>' : '') + CHEV);
+    r.onclick = go; g.appendChild(r); return r;
+  }
+  function sAct(g, label, go, cls) { var r = E('div', 'row tap ' + (cls || 'tint'), '<span class="l">' + esc(label) + '</span>'); r.onclick = go; g.appendChild(r); return r; }
+  function sField(g, label, type, ph, val) {
+    var r = E('div', 'row', '<span class="l" style="flex:none;min-width:34%">' + esc(label) + '</span>');
+    var i = E('input', 'fld'); i.type = type; i.placeholder = ph || ''; i.value = val || ''; i.autocomplete = 'off'; i.autocapitalize = 'off'; i.spellcheck = false; i.maxLength = 128;
+    r.appendChild(i); g.appendChild(r); return i;
+  }
+  function sSlider(g, label, val, min, max, fmt, onInput) {
+    var r = E('div', 'row col'), head = E('div', ''); head.style.cssText = 'display:flex;justify-content:space-between';
+    var v = E('span', ''); v.style.color = 'var(--sub)';
+    head.appendChild(E('span', '', esc(label))); head.appendChild(v);
+    var inp = document.createElement('input'); inp.type = 'range'; inp.min = min; inp.max = max; inp.value = val;
+    function paint() { inp.style.setProperty('--fill', ((inp.value - min) / (max - min) * 100) + '%'); v.textContent = fmt(+inp.value); }
+    var t = 0;
+    inp.oninput = function () { paint(); var now = Date.now(); if (now - t > 60) { t = now; onInput(+inp.value, false); } };
+    inp.onchange = function () { onInput(+inp.value, true); };
+    paint(); r.appendChild(head); r.appendChild(inp); g.appendChild(r);
+  }
+  function sSeg(g, cur, opts, cb) {
+    var r = E('div', 'row col'), seg = E('div', 'seg');
+    opts.forEach(function (o) {
+      var d = E('div', cur === o[0] ? 'on' : '', esc(o[1]));
+      d.onclick = function () { [].forEach.call(seg.children, function (c) { c.classList.remove('on'); }); d.classList.add('on'); cb(o[0]); };
+      seg.appendChild(d);
+    });
+    r.appendChild(seg); g.appendChild(r);
+  }
+  function sNote(p, text) { if (!p.note) { p.note = E('div', 'foot', ''); p.note.style.margin = '0 0 22px'; p.body.appendChild(p.note); } p.note.textContent = text || ''; }
+  function sys(name) { if (A) A.shortcut(name); else stToast('Only works inside the launcher app'); }
+  function stToast(t) { try { msg(t); } catch (e) {} }
+
+  /* ----- pages ----- */
+  function stRootPage() {
+    var p = stPage('Settings', 'Settings', true), b = p.body;
+    var g0 = grp(b);
+    var who = E('div', 'row tap big');
+    function paintWho() {
+      var signed = acct && acct.signedIn;
+      who.innerHTML = '<div class="who">' + (signed ? esc((acct.id || '?').charAt(0).toUpperCase()) : '+') + '</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:20px;overflow:hidden;text-overflow:ellipsis">' + (signed ? esc(acct.id) : 'Sign in / Create account') + '</div><div class="sub">' + (signed ? 'Launcher account' : 'Sync your layout and wallpaper') + '</div></div>' + CHEV;
+    }
+    paintWho(); who.onclick = function () { stAccount(); }; g0.appendChild(who);
+    p.refresh = paintWho;
+
+    var s = stSt();
+    var g1 = grp(b);
+    sNav(g1, 'Airplane Mode', null, function () { sys('air'); }, sico('#FF9500', SP.plane));
+    sNav(g1, 'Wi-Fi', s.wifi === undefined ? null : (s.wifi ? 'On' : 'Off'), function () { sys('wifi'); }, sico('#007AFF', SP.wifi));
+    sNav(g1, 'Bluetooth', s.bt === undefined ? null : (s.bt ? 'On' : 'Off'), function () { sys('bt'); }, sico('#007AFF', SP.bt));
+    sNav(g1, 'Mobile Data', null, function () { sys('data'); }, sico('#34C759', SP.sig));
+    var g2 = grp(b);
+    sNav(g2, 'Notifications', null, function () { stNotif(); }, sico('#FF3B30', SP.notif));
+    sNav(g2, 'Sounds', null, function () { stSounds(); }, sico('#FF2D55', SP.snd));
+    var g3 = grp(b);
+    sNav(g3, 'Display & Brightness', null, function () { stDisplay(); }, sico('#007AFF', SP.disp));
+    sNav(g3, 'Battery', null, function () { stBattery(); }, sico('#34C759', SP.bat));
+    sNav(g3, 'Storage', null, function () { stStorage(); }, sico('#8E8E93', SP.stor));
+    var g4 = grp(b, 'Launcher');
+    sNav(g4, 'Customize', null, function () { hide(stg); setTimeout(openCz, 200); }, sico('#AF52DE', SP.app));
+    sNav(g4, 'Assistant', null, function () { hide(stg); setTimeout(openAI, 200); }, sico('#5856D6', SP.ai));
+    sSwitch(g4, 'Lock screen', function () { return cfg.lockscreen; }, function (v) { cfg.lockscreen = v; save(); }, sico('#FF9500', SP.lock));
+    var g5 = grp(b);
+    sNav(g5, 'About', null, function () { stAbout(); }, sico('#8E8E93', SP.about));
+    return p;
+  }
+  function stNotif() {
+    stPush(function () {
+      var p = stPage('Notifications'), s = stSt();
+      var g = grp(p.body, null, 'Do Not Disturb needs permission the first time. Android may ask you to allow it for this launcher.');
+      sSwitch(g, 'Do Not Disturb', function () { return !!s.dnd; }, function () { if (A) A.toggle('dnd'); else stToast('Only works inside the launcher app'); });
+      var g2 = grp(p.body);
+      sAct(g2, 'Show notification shade', function () { if (A) A.openNotifications(); });
+      sAct(g2, 'Phone notification settings', function () { sys('settings'); });
+      return p;
+    });
+  }
+  function stSounds() {
+    stPush(function () {
+      var p = stPage('Sounds'), s = stSt();
+      var g = grp(p.body, 'Volume');
+      sSlider(g, 'Media', s.volume || 0, 0, 100, function (v) { return v + '%'; }, function (v) { if (A) A.setVolume(v); });
+      var g2 = grp(p.body, null, 'Silent mode switches the ringer to vibrate.');
+      sSwitch(g2, 'Silent Mode', function () { return !!s.silent; }, function () { if (A) A.toggle('silent'); });
+      return p;
+    });
+  }
+  function stDisplay() {
+    stPush(function () {
+      var p = stPage('Display & Brightness', 'Display & Brightness'), s = stSt();
+      var g = grp(p.body, 'Settings appearance');
+      sSeg(g, stPref.appearance, [['light', 'Light'], ['dark', 'Dark'], ['auto', 'Automatic']], function (v) { stPref.appearance = v; stPrefSave(); stTheme(); });
+      var g2 = grp(p.body, 'Brightness', A ? 'Changing brightness needs the \"modify system settings\" permission; Android will ask the first time.' : '');
+      sSlider(g2, 'Brightness', s.brightness || 50, 1, 100, function (v) { return v + '%'; }, function (v) { if (A) A.setBrightness(v); });
+      sSwitch(g2, 'Auto-Rotate', function () { return s.rotate !== false; }, function () { if (A) A.toggle('rotate'); });
+      var g3 = grp(p.body, 'Text');
+      g3.appendChild(E('div', 'preview', 'The quick brown fox jumps over the lazy dog.'));
+      sSlider(g3, 'Text Size', stPref.textSize, 13, 24, function (v) { return v + ' pt'; }, function (v) { stPref.textSize = v; stPrefSave(); stTheme(); });
+      sSwitch(g3, 'Bold Text', function () { return stPref.bold; }, function (v) { stPref.bold = v; stPrefSave(); stTheme(); });
+      var g4 = grp(p.body);
+      sNav(g4, 'Wallpaper & Icons', null, function () { hide(stg); setTimeout(openCz, 200); });
+      sNav(g4, 'More display settings', null, function () { sys('display'); });
+      return p;
+    });
+  }
+  function stBattery() {
+    stPush(function () {
+      var p = stPage('Battery');
+      var g = grp(p.body, 'Charge');
+      var r = E('div', 'row col'); r.innerHTML = '<div style="display:flex;justify-content:space-between"><span>Battery level</span><span style="color:var(--sub)" id="bl">—</span></div><div class="meter"><i id="bf" style="width:0"></i></div>';
+      g.appendChild(r);
+      try { var pc = A ? A.getBattery() : -1; if (pc >= 0) { r.querySelector('#bl').textContent = pc + '%'; r.querySelector('#bf').style.width = pc + '%'; } } catch (e) {}
+      var g2 = grp(p.body);
+      sNav(g2, 'Battery Saver', null, function () { sys('saver'); });
+      return p;
+    });
+  }
+  function fmtB(n) { if (n >= 1e9) return (n / 1e9).toFixed(1) + ' GB'; if (n >= 1e6) return (n / 1e6).toFixed(1) + ' MB'; return Math.round(n / 1e3) + ' KB'; }
+  function stStorage() {
+    stPush(function () {
+      var p = stPage('Storage');
+      var g = grp(p.body, 'Launcher data');
+      var r = E('div', 'row col'); r.innerHTML = '<div style="display:flex;justify-content:space-between"><span>Used</span><span style="color:var(--sub)" id="su">—</span></div><div class="meter"><i id="sf" style="width:1%"></i></div>';
+      g.appendChild(r);
+      if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(function (e) {
+        var u = e.usage || 0, q = e.quota || 1; r.querySelector('#su').textContent = fmtB(u) + ' of ' + fmtB(q); r.querySelector('#sf').style.width = Math.max(1, Math.min(100, u / q * 100)) + '%';
+      });
+      var g2 = grp(p.body, null, 'Restores the launcher to its default layout and settings. Your account stays signed in.');
+      sAct(g2, 'Reset Launcher Settings', function () {
+        if (!confirm('Reset launcher settings?')) return;
+        try { localStorage.removeItem('ios27cfg'); localStorage.removeItem('ios27st'); } catch (e) {}
+        location.reload();
+      }, 'red');
+      return p;
+    });
+  }
+  function stAbout() {
+    stPush(function () {
+      var p = stPage('About'), g = grp(p.body);
+      var ua = navigator.userAgent, m = /Android ([\d.]+)/.exec(ua), mod = /;\s*([^;)]+)\sBuild/.exec(ua);
+      var rows = [['Launcher build', A && A.appVersion ? A.appVersion() : 'preview'], ['Android', m ? m[1] : '—'], ['Model', mod ? mod[1] : '—'], ['Screen', screen.width + ' × ' + screen.height], ['Refresh rate', A ? A.getHz() + ' Hz' : '—']];
+      rows.forEach(function (x) { g.appendChild(E('div', 'row', '<span class="l">' + esc(x[0]) + '</span><span class="v">' + esc(x[1]) + '</span>')); });
+      var g2 = grp(p.body, 'Permissions');
+      var s = stSt();
+      sNav(g2, 'Control Center actions', s.a11y ? 'On' : 'Off', function () { if (A) A.openAccessibilitySettings(); });
+      sNav(g2, 'Recent apps (usage access)', s.usage ? 'On' : 'Off', function () { if (A) A.requestUsageAccess(); });
+      var g3 = grp(p.body, 'Privacy');
+      g3.appendChild(E('div', 'row col', '<div class="sub" style="font-size:14px;line-height:1.4">The launcher and assistant work offline. The internet is used only when you sign in to your own account server. Passwords are sent over HTTPS and stored only as salted hashes; the sign-in token never leaves the app.</div>'));
+      return p;
+    });
   }
 
-  function renderAccount() {
-    var box = $('stAccount'); box.innerHTML = '';
-    if (pendingRecovery) {
-      box.innerHTML = '<div class="small" style="padding:12px 14px"><b>Save your recovery code now.</b> It is the only way to reset your password if you forget it (there is no email). It is shown once.</div>' +
-        '<div class="row"><b id="stRc" style="letter-spacing:1px;font-size:17px;user-select:all"></b></div>' +
-        '<div class="row"><button class="pill" id="stRcCopy">Copy</button><button class="pill" id="stRcDone">I saved it</button></div>' +
-        '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
-      $('stRc').textContent = pendingRecovery; stMsgEl = $('stMsg');
-      $('stRcCopy').onclick = function () { try { navigator.clipboard.writeText(pendingRecovery).then(function () { stNote('Copied.'); }, function () { stNote('Select the code and copy it.'); }); } catch (e) { stNote('Select the code and copy it.'); } };
-      $('stRcDone').onclick = function () { pendingRecovery = ''; renderAccount(); };
-      return;
-    }
-    if (!acct.server) {
-      box.innerHTML = '<div class="small" style="padding:12px 14px">No account server is set up yet. Enter its address below (see DEPLOY.md in the project).</div><div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
-      stMsgEl = $('stMsg'); return;
-    }
-    if (!acct.signedIn && forgot) {
-      box.innerHTML =
-        '<div class="row"><span>ID</span><input id="stId" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
-        '<div class="row"><span>Recovery code</span><input id="stRec" type="text" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>' +
-        '<div class="row"><span>New password</span><input id="stPw" type="password" placeholder="8+ characters" autocomplete="off"></div>' +
-        '<div class="row"><button class="pill" id="stReset">Reset password</button><button class="pill" id="stBack">Back</button></div>' +
-        '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
-      stMsgEl = $('stMsg');
-      $('stBack').onclick = function () { forgot = false; renderAccount(); };
-      $('stReset').onclick = function () {
-        var id = $('stId').value.trim().toLowerCase(), rc = $('stRec').value.trim(), pw = $('stPw').value;
-        if (!id || !rc) { stNote('Enter your ID and recovery code.'); return; }
-        if (pw.length < 8) { stNote('New password needs at least 8 characters.'); return; }
-        stNote('Resetting…');
-        api('POST', '/api/recover', { id: id, recovery: rc, newPassword: pw }, function (s, j) {
-          if (s === 200) { forgot = false; pendingRecovery = j.recovery || ''; acctRefresh(); renderAccount(); }
-          else stNote(errText(s, j));
-        });
-      };
-      return;
-    }
-    if (!acct.signedIn) {
-      box.innerHTML =
-        '<div class="row"><span>ID</span><input id="stId" type="text" placeholder="your launcher ID" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
-        '<div class="row"><span>Password</span><input id="stPw" type="password" placeholder="8+ characters" autocomplete="off"></div>' +
-        '<div class="row"><button class="pill" id="stUp">Create account</button><button class="pill" id="stIn">Sign in</button></div>' +
-        '<div class="row"><button class="pill" id="stForgot">Forgot password?</button></div>' +
-        '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
-      stMsgEl = $('stMsg');
-      $('stForgot').onclick = function () { forgot = true; renderAccount(); };
-      var creds = function () {
-        var id = $('stId').value.trim().toLowerCase(), pw = $('stPw').value;
-        if (!/^[a-z0-9_.]{3,24}$/.test(id)) { stNote('ID: 3-24 letters, numbers, dot or underscore.'); return null; }
-        if (pw.length < 8) { stNote('Password needs at least 8 characters.'); return null; }
-        return { id: id, password: pw };
-      };
-      $('stUp').onclick = function () {
-        var c = creds(); if (!c) return;
-        stNote('Creating your account…');
-        api('POST', '/api/register', c, function (s, j) {
-          if (s === 201 || s === 200) { pendingRecovery = j.recovery || ''; acctRefresh(); pushSettings(true); renderAccount(); }
-          else stNote(errText(s, j));
-        });
-      };
-      $('stIn').onclick = function () {
-        var c = creds(); if (!c) return;
-        stNote('Signing in…');
-        api('POST', '/api/login', c, function (s, j) {
-          if (s !== 200) { stNote(errText(s, j)); return; }
-          acctRefresh();
-          api('GET', '/api/settings', null, function (s2, j2) {
-            if (s2 === 200 && j2.settings) { applySync(j2.settings); syncState.last = j2.updatedAt; saveSync(); stNote('Signed in. Settings loaded from your account.'); }
-            else { pushSettings(false); stNote('Signed in. This phone’s settings were saved to your account.'); }
+  /* ----- account ----- */
+  function stAccount() {
+    acctRefresh();
+    var p = stPush(function () { return stPage('Account', 'Account'); });
+    function build() {
+      p.body.innerHTML = ''; p.body.appendChild(E('h1', '', 'Account')); p.note = null;
+      if (!acct.server) {
+        var g = grp(p.body, null, 'No account server is set up yet. Enter its address (see DEPLOY.md in the project).');
+        sNav(g, 'Server', null, function () { stServer(build); });
+        return;
+      }
+      if (!acct.signedIn) {
+        var g1 = grp(p.body, null, 'Pick any ID and password. No Google account, email or phone number is needed. You get a recovery code in case you forget your password.');
+        var idI = sField(g1, 'ID', 'text', 'your launcher ID'), pwI = sField(g1, 'Password', 'password', '8+ characters');
+        var g2 = grp(p.body);
+        var creds = function () {
+          var id = idI.value.trim().toLowerCase(), pw = pwI.value;
+          if (!/^[a-z0-9_.]{3,24}$/.test(id)) { sNote(p, 'ID: 3–24 letters, numbers, dot or underscore.'); return null; }
+          if (pw.length < 8) { sNote(p, 'Password needs at least 8 characters.'); return null; }
+          return { id: id, password: pw };
+        };
+        sAct(g2, 'Create Account', function () {
+          var c = creds(); if (!c) return; sNote(p, 'Creating your account…');
+          api('POST', '/api/register', c, function (s, j) {
+            if (s === 201 || s === 200) { acctRefresh(); pushSettings(true); stRecovery(j.recovery, build); }
+            else sNote(p, errText(s, j));
           });
         });
-      };
-      return;
+        sAct(g2, 'Sign In', function () {
+          var c = creds(); if (!c) return; sNote(p, 'Signing in…');
+          api('POST', '/api/login', c, function (s, j) {
+            if (s !== 200) { sNote(p, errText(s, j)); return; }
+            acctRefresh();
+            api('GET', '/api/settings', null, function (s2, j2) {
+              if (s2 === 200 && j2.settings) { applySync(j2.settings); syncState.last = j2.updatedAt; saveSync(); } else pushSettings(true);
+              if (stack[0] && stack[0].refresh) stack[0].refresh();
+              build(); sNote(p, 'Signed in.');
+            });
+          });
+        });
+        sAct(g2, 'Forgot Password', function () { stForgot(build); }, '');
+        if (!acct.builtIn) { var g3 = grp(p.body); sNav(g3, 'Server', acct.server.replace('https://', ''), function () { stServer(build); }); }
+        return;
+      }
+      var g = grp(p.body);
+      g.appendChild(E('div', 'row', '<span class="l">Signed in as</span><span class="v">' + esc(acct.id) + '</span>'));
+      var g2 = grp(p.body, 'Sync', 'Syncs layout, wallpaper choice, icon style, dock and hidden apps. Photos are not uploaded.');
+      sSwitch(g2, 'Auto-sync', function () { return !!syncState.auto; }, function (v) { syncState.auto = v; saveSync(); });
+      sAct(g2, 'Upload Now', function () { sNote(p, 'Uploading…'); stMsgEl = p.note; pushSettings(false); });
+      sAct(g2, 'Download Settings', function () { sNote(p, 'Downloading…'); stMsgEl = p.note; pullSettings(); });
+      var g3 = grp(p.body, 'Security');
+      sNav(g3, 'Change Password', null, function () { stChangePw(); });
+      sNav(g3, 'New Recovery Code', null, function () { stNewRc(build); });
+      var g4 = grp(p.body);
+      sAct(g4, 'Sign Out', function () {
+        api('POST', '/api/logout', {}, function () { if (A) A.acctSignOut(); acctRefresh(); if (stack[0] && stack[0].refresh) stack[0].refresh(); build(); });
+      }, 'tint');
+      sNav(g4, 'Delete Account', null, function () { stDelete(build); });
+      if (!acct.builtIn) { var g5 = grp(p.body); sNav(g5, 'Server', acct.server.replace('https://', ''), function () { stServer(build); }); }
     }
-    box.innerHTML =
-      '<div class="row"><span>Signed in as</span><b id="stWho"></b></div>' +
-      '<div class="row"><span>Auto-sync my settings</span><div class="sw" id="stAuto"></div></div>' +
-      '<div class="row"><button class="pill" id="stPush">Upload now</button><button class="pill" id="stPull">Download</button></div>' +
-      '<div class="row"><span>Old password</span><input id="stOld" type="password" autocomplete="off"></div>' +
-      '<div class="row"><span>New password</span><input id="stNew" type="password" placeholder="8+ characters" autocomplete="off"></div>' +
-      '<div class="row"><button class="pill" id="stChg">Change password</button><button class="pill" id="stOut">Sign out</button></div>' +
-      '<div class="row"><button class="pill" id="stNewRc">New recovery code</button></div>' +
-      '<div class="row"><span>Password to delete</span><input id="stDelPw" type="password" autocomplete="off"></div>' +
-      '<div class="row"><button class="pill" id="stDel" style="background:#ff453a;color:#fff">Delete account</button></div>' +
-      '<div class="small" id="stMsg" style="padding:0 14px 12px"></div>';
-    stMsgEl = $('stMsg');
-    $('stWho').textContent = acct.id;
-    sw($('stAuto'), syncState.auto, function (v) { syncState.auto = v; saveSync(); });
-    $('stPush').onclick = function () { stNote('Uploading…'); pushSettings(false); };
-    $('stPull').onclick = function () { stNote('Downloading…'); pullSettings(); };
-    $('stChg').onclick = function () {
-      var o = $('stOld').value, n = $('stNew').value;
-      if (n.length < 8) { stNote('New password needs at least 8 characters.'); return; }
-      api('POST', '/api/password', { oldPassword: o, newPassword: n }, function (s, j) {
-        if (s === 200) { $('stOld').value = ''; $('stNew').value = ''; stNote('Password changed. Your other devices were signed out.'); }
-        else stNote(errText(s, j));
+    stMsgEl = null; p.rebuild = build; build();
+  }
+  // status text for pages built by stAccount goes to p.note; sync callbacks use stNote(), so point it at the visible page
+  var _stNote = stNote;
+  stNote = function (t) { var top = stack[stack.length - 1]; if (top && top.body) sNote(top, t); };
+  function stRecovery(code, done) {
+    var p = stPush(function () { return stPage('Recovery Code', 'Recovery Code'); });
+    var g = grp(p.body, null, 'Save this code somewhere safe (a note or screenshot). It is the only way to reset your password if you forget it — there is no email. It is shown once.');
+    g.appendChild(E('div', 'row col', '<div class="rc">' + esc(code || '') + '</div>'));
+    var g2 = grp(p.body);
+    sAct(g2, 'Copy Code', function () { try { navigator.clipboard.writeText(code).then(function () { sNote(p, 'Copied.'); }, function () { sNote(p, 'Press and hold the code to copy it.'); }); } catch (e) { sNote(p, 'Press and hold the code to copy it.'); } });
+    sAct(g2, 'I’ve Saved It', function () { stPop(); if (stack[0] && stack[0].refresh) stack[0].refresh(); if (done) done(); }, 'tint');
+  }
+  function stForgot(done) {
+    var p = stPush(function () { return stPage('Forgot Password', 'Reset Password'); });
+    var g = grp(p.body, null, 'Enter your ID, the recovery code you saved at sign-up, and a new password.');
+    var idI = sField(g, 'ID', 'text', 'your launcher ID'), rcI = sField(g, 'Code', 'text', 'XXXXX-XXXXX-XXXXX-XXXXX'), pwI = sField(g, 'New password', 'password', '8+ characters');
+    var g2 = grp(p.body);
+    sAct(g2, 'Reset Password', function () {
+      var id = idI.value.trim().toLowerCase(), rc = rcI.value.trim(), pw = pwI.value;
+      if (!id || !rc) { sNote(p, 'Enter your ID and recovery code.'); return; }
+      if (pw.length < 8) { sNote(p, 'New password needs at least 8 characters.'); return; }
+      sNote(p, 'Resetting…');
+      api('POST', '/api/recover', { id: id, recovery: rc, newPassword: pw }, function (s, j) {
+        if (s !== 200) { sNote(p, errText(s, j)); return; }
+        acctRefresh(); stPop(); if (stack[0] && stack[0].refresh) stack[0].refresh();
+        stRecovery(j.recovery, done); if (done) done();
       });
-    };
-    $('stOut').onclick = function () {
-      api('POST', '/api/logout', {}, function () { if (A) A.acctSignOut(); acctRefresh(); stNote('Signed out.'); });
-    };
-    $('stNewRc').onclick = function () {
-      var pw = $('stDelPw').value;
-      if (!pw) { stNote('Type your password in the box below first.'); return; }
-      api('POST', '/api/recovery-code', { password: pw }, function (s, j) {
-        if (s === 200) { pendingRecovery = j.recovery || ''; renderAccount(); } else stNote(errText(s, j));
+    });
+  }
+  function stChangePw() {
+    var p = stPush(function () { return stPage('Change Password', 'Change Password'); });
+    var g = grp(p.body, null, 'Changing your password signs out your other devices.');
+    var oI = sField(g, 'Current', 'password', 'current password'), nI = sField(g, 'New', 'password', '8+ characters');
+    var g2 = grp(p.body);
+    sAct(g2, 'Change Password', function () {
+      if (nI.value.length < 8) { sNote(p, 'New password needs at least 8 characters.'); return; }
+      api('POST', '/api/password', { oldPassword: oI.value, newPassword: nI.value }, function (s, j) {
+        if (s === 200) { oI.value = ''; nI.value = ''; sNote(p, 'Password changed.'); } else sNote(p, errText(s, j));
       });
-    };
-    $('stDel').onclick = function () {
-      var pw = $('stDelPw').value;
-      if (!pw) { stNote('Type your password above to delete the account.'); return; }
-      api('POST', '/api/account/delete', { password: pw }, function (s, j) {
-        if (s === 200) { if (A) A.acctSignOut(); acctRefresh(); stNote('Account deleted.'); }
-        else stNote(errText(s, j));
+    });
+  }
+  function stNewRc(done) {
+    var p = stPush(function () { return stPage('Recovery Code', 'New Recovery Code'); });
+    var g = grp(p.body, null, 'Your old recovery code stops working as soon as you make a new one.');
+    var pwI = sField(g, 'Password', 'password', 'your password');
+    var g2 = grp(p.body);
+    sAct(g2, 'Create New Code', function () {
+      api('POST', '/api/recovery-code', { password: pwI.value }, function (s, j) {
+        if (s === 200) { stPop(); stRecovery(j.recovery, done); } else sNote(p, errText(s, j));
       });
-    };
+    });
+  }
+  function stDelete(done) {
+    var p = stPush(function () { return stPage('Delete Account', 'Delete Account'); });
+    var g = grp(p.body, null, 'This permanently deletes your launcher account and its saved settings from the server. This phone keeps its own settings.');
+    var pwI = sField(g, 'Password', 'password', 'your password');
+    var g2 = grp(p.body);
+    sAct(g2, 'Delete Account', function () {
+      if (!pwI.value) { sNote(p, 'Type your password first.'); return; }
+      if (!confirm('Delete your account for good?')) return;
+      api('POST', '/api/account/delete', { password: pwI.value }, function (s, j) {
+        if (s === 200) { if (A) A.acctSignOut(); acctRefresh(); stPop(); if (stack[0] && stack[0].refresh) stack[0].refresh(); if (done) done(); }
+        else sNote(p, errText(s, j));
+      });
+    }, 'red');
+  }
+  function stServer(done) {
+    var p = stPush(function () { return stPage('Server', 'Server'); });
+    var g = grp(p.body, null, 'The https:// address of your launcher account server.');
+    var sI = sField(g, 'Address', 'url', 'https://your-server.example.com', acct.server || '');
+    var g2 = grp(p.body);
+    function saveIt() { var e = A ? A.acctSetServer(sI.value) : 'Only works inside the launcher app'; if (e) { sNote(p, e); return false; } acctRefresh(); sNote(p, 'Saved.'); return true; }
+    sAct(g2, 'Save', function () { if (saveIt() && done) done(); });
+    sAct(g2, 'Test Connection', function () {
+      if (!saveIt()) return; sNote(p, 'Testing…');
+      api('GET', '/health', null, function (s, j) { sNote(p, (s === 200 && j.ok) ? 'Connected ✓' : 'Could not reach the server: ' + errText(s, j)); });
+    });
   }
 
+  function acctRefresh() {
+    if (A) { try { acct = JSON.parse(A.acctState()); } catch (e) {} }
+    if (stack[0] && stack[0].refresh) stack[0].refresh();
+  }
   function openSt() {
-    closeAll();
-    acctRefresh();
-    forgot = false;
-    renderAccount();
-    $('stServer').value = acct.server || '';
-    $('stServerMsg').textContent = '';
-    sw($('stLock'), cfg.lockscreen, function (v) { cfg.lockscreen = v; save(); });
-    $('stHz').textContent = A ? (A.getHz() + ' Hz (max for this screen)') : '—';
-    $('stServerCard').style.display = acct.builtIn ? 'none' : '';
-    $('stServerSec').style.display = acct.builtIn ? 'none' : '';
-    $('stVer').textContent = 'Launcher build ' + (A && A.appVersion ? A.appVersion() : 'preview');
+    closeAll(); stTheme(); acctRefresh();
+    stShadow.innerHTML = '<style>' + ST_CSS + '</style><div id="app"></div>';
+    stApp = stShadow.getElementById('app'); stack = [];
+    var r = stRootPage(); stApp.appendChild(r.el); stack = [r];
     show(stg);
   }
-  function saveServer() {
-    var e = A ? A.acctSetServer($('stServer').value) : 'Only works inside the launcher app';
-    $('stServerMsg').textContent = e || 'Saved.';
-    acctRefresh();
-    return !e;
-  }
-  $('stSave').onclick = saveServer;
-  $('stTest').onclick = function () {
-    if (!saveServer()) return;
-    $('stServerMsg').textContent = 'Testing…';
-    api('GET', '/health', null, function (s, j) { $('stServerMsg').textContent = (s === 200 && j.ok) ? 'Connected ✓' : 'Could not reach the server: ' + errText(s, j); });
-  };
-  $('stCust').onclick = function () { closeAll(); setTimeout(openCz, 180); };
-  $('stAsst').onclick = function () { closeAll(); setTimeout(openAI, 180); };
+  window.stBack = function () { return stPop(); };
   acctRefresh();
 
   /* ---------- Gestures ---------- */
@@ -1302,6 +1588,7 @@
 
   window.onBack = function () {
     if (locked) return true;
+    if (isOpen(stg) && stack.length > 1) { stPop(); return true; }
     if (anyOpen()) { closeAll(); return true; }
     return false;
   };
