@@ -108,6 +108,9 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.webView)
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        webView.overScrollMode = View.OVER_SCROLL_NEVER
+        webView.isVerticalScrollBarEnabled = false
+        webView.isHorizontalScrollBarEnabled = false
         ContextCompat.registerReceiver(
             this, screenReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED
         )
