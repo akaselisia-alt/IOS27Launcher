@@ -55,6 +55,18 @@ jobs:
           fi
           ls -l out
 
+      # Puts the new APKs into your own Store. Runs only when you add the STORE_ID and STORE_PASSWORD secrets.
+      - name: Publish to the Store
+        continue-on-error: true
+        env:
+          STORE_SERVER: ${{ vars.LAUNCHER_SERVER || 'https://ios27launcher-1.onrender.com' }}
+          STORE_ID: ${{ secrets.STORE_ID }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          node tools/publish-to-store.js \
+            "iOS 27 Launcher|com.ios27.launcher|out/IOS27Launcher.apk|Tools|A home screen launcher with an iOS look, Control Center, Settings, assistant and lock screen." \
+            "iOS 27 Store|com.ios27.store|out/IOS27Store.apk|Tools|The app store for this launcher: browse, install and sell apps."
+
       - name: Upload APKs as build artifacts
         uses: actions/upload-artifact@v4
         with:
