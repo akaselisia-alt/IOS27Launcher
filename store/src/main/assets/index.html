@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Store</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#host{position:absolute;inset:0}</style>
+</head><body>
+<div id="host"></div>
+<script src="store-ui.js"></script>
+<script>
+(function () {
+  var A = window.Android, acct = {}, net = {}, n = 0, ctl = null;
+  function refresh() { try { acct = JSON.parse(A.acctState()); } catch (e) {} }
+  function api(method, path, body, cb) {
+    var id = ++n;
+    net[id] = function (s, t) { var j = {}; try { j = JSON.parse(t); } catch (e) {} cb(s, j); };
+    A.acctRequest(id, method, path, body ? JSON.stringify(body) : '');
+  }
+  window.onNet = function (id, s, t) { var f = net[id]; if (f) { delete net[id]; f(s, t); } };
+  window.onBack = function () { return ctl ? ctl.back() : false; };
+  window.onResumed = function () { refresh(); if (ctl) ctl.resumed(); };
+  refresh();
+  var env = {
+    A: A, api: api, server: function () { return acct.server || ''; }, acct: function () { return acct; }, refreshAcct: refresh,
+    setServer: function (u) { return A.acctSetServer(u); }
+  };
+  ctl = StoreUI.mount(document.getElementById('host'), env);
+})();
+</script>
+</body></html>

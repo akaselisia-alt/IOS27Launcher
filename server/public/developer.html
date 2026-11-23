@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Developer — iOS 27 Store</title>
+<style>
+body{font:16px/1.4 system-ui,sans-serif;margin:0;background:#f2f2f7;color:#111}main{max-width:720px;margin:0 auto;padding:20px 14px 60px}
+h1{font-size:26px;margin:6px 0 14px}h2{font-size:18px;margin:26px 0 8px}.card{background:#fff;border-radius:14px;padding:14px;margin:0 0 12px}
+input,select,textarea,button{font:inherit;padding:10px 12px;border-radius:10px;border:1px solid #c6c6c8;width:100%;margin:4px 0 8px;background:#fff}
+button{background:#007aff;color:#fff;border:0;font-weight:600;cursor:pointer;width:auto;padding:10px 16px}button.s{background:#e5e5ea;color:#111}button.r{background:#ff3b30}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:120px}small,.sub{color:#6d6d72}.bar{height:8px;background:#e5e5ea;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:#007aff;width:0}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:8px;background:#e5e5ea;margin-left:6px}.ok{background:#d6f5df}.bad{background:#ffd9d6}.wait{background:#fff0c7}
+#msg{position:sticky;top:0;background:#111;color:#fff;border-radius:10px;padding:8px 12px;margin-bottom:10px;display:none}
+</style></head><body><main>
+<div id="msg"></div>
+<h1>Developer dashboard</h1>
+<div id="login" class="card">
+  <p class="sub">Use your launcher ID, or create one here. Publish apps, see downloads and earnings.</p>
+  <input id="uid" placeholder="launcher ID" autocapitalize="off"><input id="pw" type="password" placeholder="password (8+ characters)">
+  <button id="in">Sign in</button> <button class="s" id="up">Create account</button>
+  <p class="sub" id="rcnote"></p>
+</div>
+<div id="app" style="display:none">
+  <p><span id="who"></span> <button class="s" id="out">Sign out</button> <a id="adminLink" href="/admin" style="display:none">Admin</a></p>
+  <h2>Earnings</h2><div class="card" id="earn"></div>
+  <div class="card"><b>Payout details</b> <small>(how you want to be paid, e.g. mobile money number)</small>
+    <div class="row"><select id="pm"><option>Mobile money</option><option>Bank transfer</option><option>PayPal</option><option>Other</option></select><input id="pd" placeholder="number / account / email"></div><button id="pds">Save</button></div>
+  <h2>New app</h2>
+  <div class="card">
+    <input id="n" placeholder="App name"><input id="pkg" placeholder="Package name, e.g. com.yourname.myapp" autocapitalize="off">
+    <select id="cat"></select><textarea id="d" rows="4" placeholder="Description"></textarea>
+    <input id="price" type="number" min="0" step="0.01" placeholder="Price (0 = free)"><small id="cur"></small>
+    <div><button id="create">Create app</button></div>
+  </div>
+  <h2>My apps</h2><div id="mine"></div>
+</div>
+</main>
+<script>
+(function () {
+  var T = sessionStorage.getItem('tok') || '', $ = function (i) { return document.getElementById(i); }, cfg = { currency: '', categories: [], feePercent: 30 };
+  function msg(t) { var m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(msg.t); msg.t = setTimeout(function () { m.style.display = 'none'; }, 4000); }
+  function api(m, p, b) {
+    return fetch(p, { method: m, headers: Object.assign({ 'Content-Type': 'application/json' }, T ? { Authorization: 'Bearer ' + T } : {}), body: b ? JSON.stringify(b) : undefined })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('Error ' + r.status)); return j; }); });
+  }
+  function el(t, c, x) { var e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; }
+  function money(v) { return (cfg.currency === 'XOF' ? v : v / 100).toFixed(cfg.currency === 'XOF' ? 0 : 2) + ' ' + cfg.currency; }
+  function auth(path) {
+    var id = $('uid').value.trim().toLowerCase(), pw = $('pw').value;
+    api('POST', path, { id: id, password: pw }).then(function (j) { T = j.token; sessionStorage.setItem('tok', T); if (j.recovery) alert('SAVE YOUR RECOVERY CODE (shown once):\n\n' + j.recovery); start(); }).catch(function (e) { msg(e.message); });
+  }
+  $('in').onclick = function () { auth('/api/login'); }; $('up').onclick = function () { auth('/api/register'); };
+  $('out').onclick = function () { api('POST', '/api/logout', {}).catch(function () {}); T = ''; sessionStorage.removeItem('tok'); location.reload(); };
+  function upload(path, file, cb) {
+    var x = new XMLHttpRequest(); x.open('PUT', path); x.setRequestHeader('Authorization', 'Bearer ' + T);
+    var bar = el('div', 'bar'), i = el('i'); bar.appendChild(i); cb.holder.appendChild(bar);
+    x.upload.onprogress = function (e) { if (e.lengthComputable) i.style.width = (e.loaded / e.total * 100) + '%'; };
+    x.onload = function () { bar.remove(); var j = {}; try { j = JSON.parse(x.responseText); } catch (e) {} if (x.status < 300) { msg('Uploaded'); load(); } else msg(j.error || ('Upload failed ' + x.status)); };
+    x.onerror = function () { bar.remove(); msg('Upload failed'); };
+    x.send(file);
+  }
+  function appCard(a) {
+    var c = el('div', 'card'), h = el('div'); h.appendChild(el('b', '', a.name));
+    var st = el('span', 'tag ' + (a.status === 'approved' ? 'ok' : a.status === 'rejected' || a.status === 'suspended' ? 'bad' : 'wait'), a.status); h.appendChild(st); c.appendChild(h);
+    c.appendChild(el('div', 'sub', a.pkg + ' · ' + (a.priceMinor ? money(a.priceMinor) : 'Free') + ' · ' + a.downloads + ' downloads · ' + (a.ratings ? a.rating + '★ (' + a.ratings + ')' : 'no ratings')));
+    if (a.note) c.appendChild(el('div', 'sub', 'Reviewer note: ' + a.note));
+    a.versions.forEach(function (v) { c.appendChild(el('div', 'sub', 'v' + v.name + ' · ' + (v.size / 1048576).toFixed(1) + ' MB · ' + v.status)); });
+    var row = el('div', 'row'), apk = el('input'), ver = el('input'), ic = el('input'); apk.type = 'file'; apk.accept = '.apk'; ic.type = 'file'; ic.accept = 'image/png,image/jpeg'; ver.placeholder = 'version, e.g. 1.0.3';
+    c.appendChild(el('div', 'sub', 'Upload a new APK version:')); row.appendChild(ver); row.appendChild(apk); c.appendChild(row);
+    var b1 = el('button', '', 'Upload APK'); b1.onclick = function () { if (!apk.files[0]) return msg('Choose an APK'); upload('/api/store/apps/' + a.id + '/apk?versionName=' + encodeURIComponent(ver.value || '1.0'), apk.files[0], { holder: c }); };
+    c.appendChild(b1); c.appendChild(el('div', 'sub', 'Icon (PNG or JPG, 512×512, max 400 KB):')); c.appendChild(ic);
+    var b2 = el('button', 's', 'Upload icon'); b2.onclick = function () { if (!ic.files[0]) return msg('Choose an image'); upload('/api/store/apps/' + a.id + '/icon', ic.files[0], { holder: c }); }; c.appendChild(b2);
+    var b3 = el('button', 'r', 'Delete app'); b3.style.marginLeft = '8px'; b3.onclick = function () { if (confirm('Delete ' + a.name + ' for good?')) api('POST', '/api/store/apps/' + a.id + '/delete', {}).then(load).catch(function (e) { msg(e.message); }); }; c.appendChild(b3);
+    return c;
+  }
+  function load() {
+    api('GET', '/api/store/mine').then(function (j) {
+      var m = $('mine'); m.innerHTML = ''; j.apps.forEach(function (a) { m.appendChild(appCard(a)); }); if (!j.apps.length) m.appendChild(el('p', 'sub', 'No apps yet.'));
+      var e = j.earnings; $('earn').textContent = 'Balance ' + money(e.balance) + ' · earned ' + money(e.earned) + ' · paid out ' + money(e.paid) + '  (the store keeps ' + cfg.feePercent + '% of each sale)';
+      if (j.payinfo) { $('pd').value = j.payinfo.details; }
+      $('adminLink').style.display = j.admin ? 'inline' : 'none';
+    }).catch(function (e) { if (/sign in/i.test(e.message)) { T = ''; sessionStorage.removeItem('tok'); location.reload(); } else msg(e.message); });
+  }
+  $('pds').onclick = function () { api('PUT', '/api/store/payout-info', { method: $('pm').value, details: $('pd').value }).then(function () { msg('Saved'); }).catch(function (e) { msg(e.message); }); };
+  $('create').onclick = function () {
+    var pr = parseFloat($('price').value || '0') || 0; var minor = cfg.currency === 'XOF' ? Math.round(pr) : Math.round(pr * 100);
+    api('POST', '/api/store/apps', { name: $('n').value, pkg: $('pkg').value, category: $('cat').value, description: $('d').value, priceMinor: minor }).then(function () { msg('App created. Now upload an APK below.'); $('n').value = ''; $('pkg').value = ''; $('d').value = ''; load(); }).catch(function (e) { msg(e.message); });
+  };
+  function start() {
+    api('GET', '/api/store/config').then(function (c) { cfg = c; $('cur').textContent = 'Prices are in ' + c.currency + '. APK limit ' + c.maxApkMB + ' MB. New apps are reviewed before they appear.'; $('cat').innerHTML = ''; c.categories.forEach(function (x) { var o = el('option', '', x); $('cat').appendChild(o); }); });
+    api('GET', '/api/me').then(function (j) { $('who').textContent = 'Signed in as ' + j.id; $('login').style.display = 'none'; $('app').style.display = 'block'; load(); }).catch(function () { $('login').style.display = 'block'; $('app').style.display = 'none'; });
+  }
+  start();
+})();
+</script></body></html>

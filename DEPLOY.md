@@ -29,3 +29,32 @@ name `LAUNCHER_SERVER`, value `https://YOUR-ADDRESS` (no trailing slash). Then A
 * Passwords are never stored, only salted scrypt hashes. Recovery codes are stored as hashes.
 * Without email, a lost password AND lost recovery code cannot be recovered; delete the account in `db.json` so the ID can be reused.
 * `https://YOUR-ADDRESS/privacy` is a ready privacy page you can link if you publish the app.
+
+## The Store (apps, uploads, money)
+
+The same server also runs the app store. Anyone with an account can upload an APK at `https://YOUR-SERVER/developer`;
+after you approve it at `https://YOUR-SERVER/admin` it appears in the Store inside the launcher and in the separate
+**IOS27Store.apk** (both are built by the workflow and published on the Releases page).
+
+Set these environment variables on the server:
+
+| Variable | What it does |
+|---|---|
+| `ADMIN_IDS` | Your launcher account ID (comma-separated for more). Only these accounts can approve apps, record payouts and refund. |
+| `PUBLIC_URL` | The https address of your server (needed for payment return links). |
+| `PAYMENT_PROVIDER` | `paystack`, `flutterwave`, `mock` (testing only) or `none` (free apps only). |
+| `PAYSTACK_SECRET` / `FLW_SECRET` / `FLW_WEBHOOK_HASH` | Keys from your Paystack or Flutterwave dashboard. |
+| `CURRENCY` | Default `GHS`. |
+| `PLATFORM_FEE_PERCENT` | Your cut of each sale, default 30. |
+| `MAX_APK_MB` | Upload size limit, default 150. |
+| `AUTO_APPROVE` | `1` skips review (not recommended). |
+
+Webhook URLs to enter in the provider dashboard: `/api/store/webhook/paystack` or `/api/store/webhook/flutterwave`.
+
+Things to know:
+- The server must have **HTTPS and a persistent disk** (apps and the database live in `DATA_DIR`). Free tiers that erase disk will lose every upload.
+- Payouts to developers are **manual**: the admin page shows what each developer is owed; you pay them and record it.
+- A refund in the admin page reverses the ledger; also refund the customer in the provider dashboard.
+- The server checks that an upload is a real APK and records its SHA-256 (the app verifies it before installing), but it **cannot scan for malware**. Review apps before approving.
+- Phones must allow "install unknown apps" for the Store/launcher the first time.
+- Set the `LAUNCHER_SERVER` repository variable and re-run the workflow so both APKs know your server.

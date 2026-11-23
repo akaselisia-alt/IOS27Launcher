@@ -1,6 +1,7 @@
 FROM node:22-alpine
 WORKDIR /app
-COPY package.json server.js ./
+COPY package.json server.js store.js ./
+COPY public ./public
 RUN mkdir /data && chown node:node /data
 ENV NODE_ENV=production DATA_DIR=/data PORT=8080
 # Only turn this on behind an HTTPS proxy / host that sets X-Forwarded-For:

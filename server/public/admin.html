@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin — iOS 27 Store</title>
+<style>
+body{font:16px/1.4 system-ui,sans-serif;margin:0;background:#f2f2f7;color:#111}main{max-width:760px;margin:0 auto;padding:20px 14px 60px}h1{font-size:26px}h2{font-size:18px;margin:24px 0 8px}
+.card{background:#fff;border-radius:14px;padding:14px;margin:0 0 12px}input,button{font:inherit;padding:9px 12px;border-radius:10px;border:1px solid #c6c6c8;margin:4px 4px 4px 0}
+button{background:#007aff;color:#fff;border:0;font-weight:600;cursor:pointer}button.g{background:#34c759}button.r{background:#ff3b30}button.s{background:#e5e5ea;color:#111}.sub{color:#6d6d72;font-size:14px;word-break:break-all}
+#msg{position:sticky;top:0;background:#111;color:#fff;border-radius:10px;padding:8px 12px;margin-bottom:10px;display:none}
+</style></head><body><main><div id="msg"></div><h1>Store admin</h1>
+<p class="sub">Sign in on the <a href="/developer">developer page</a> with an ID listed in ADMIN_IDS, then come back here.</p>
+<h2>Waiting for review</h2><div id="pend"></div>
+<h2>Suspended (reported by users)</h2><div id="susp"></div>
+<h2>Payouts owed to developers</h2><div id="pay"></div>
+</main>
+<script>
+(function () {
+  var T = sessionStorage.getItem('tok') || '', $ = function (i) { return document.getElementById(i); };
+  function msg(t) { var m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(msg.t); msg.t = setTimeout(function () { m.style.display = 'none'; }, 4000); }
+  function api(m, p, b) { return fetch(p, { method: m, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + T }, body: b ? JSON.stringify(b) : undefined }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); }); }
+  function el(t, c, x) { var e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; }
+  function dlApk(it) {
+    fetch('/api/store/apps/' + it.app + '/download?v=' + it.version, { headers: { Authorization: 'Bearer ' + T } }).then(function (r) { if (!r.ok) throw new Error('download failed'); return r.blob(); })
+      .then(function (b) { var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = it.pkg + '.apk'; a.click(); }).catch(function (e) { msg(e.message); });
+  }
+  function review(it, action) {
+    var note = prompt(action === 'approve' ? 'Optional note' : 'Reason (shown to the developer)') || '';
+    api('POST', '/api/admin/apps/' + it.app + '/review', { action: action, version: it.version, note: note }).then(function () { msg('Done'); load(); }).catch(function (e) { msg(e.message); });
+  }
+  function load() {
+    api('GET', '/api/admin/pending').then(function (j) {
+      var p = $('pend'); p.innerHTML = ''; if (!j.pending.length) p.appendChild(el('p', 'sub', 'Nothing waiting.'));
+      j.pending.forEach(function (it) {
+        var c = el('div', 'card'); c.appendChild(el('b', '', it.name + ' v' + it.versionName)); c.appendChild(el('div', 'sub', it.pkg + ' · by ' + it.dev + ' · ' + (it.size / 1048576).toFixed(1) + ' MB'));
+        c.appendChild(el('div', 'sub', 'SHA-256 ' + it.sha256));
+        var d = el('button', 's', 'Download to inspect'); d.onclick = function () { dlApk(it); }; var a = el('button', 'g', 'Approve'); a.onclick = function () { review(it, 'approve'); }; var r = el('button', 'r', 'Reject'); r.onclick = function () { review(it, 'reject'); };
+        c.appendChild(d); c.appendChild(a); c.appendChild(r); p.appendChild(c);
+      });
+      var s = $('susp'); s.innerHTML = ''; if (!j.suspended.length) s.appendChild(el('p', 'sub', 'None.'));
+      j.suspended.forEach(function (it) { var c = el('div', 'card'); c.appendChild(el('b', '', it.name)); c.appendChild(el('div', 'sub', it.pkg + ' · ' + it.dev + ' · reports: ' + it.reports.join(' | ')));
+        var a = el('button', 'g', 'Restore'); a.onclick = function () { review({ app: it.app }, 'approve'); }; var r = el('button', 'r', 'Keep hidden'); r.onclick = function () { review({ app: it.app }, 'reject'); }; c.appendChild(a); c.appendChild(r); s.appendChild(c); });
+    }).catch(function (e) { msg(e.message + ' (sign in on /developer first with an admin ID)'); });
+    api('GET', '/api/admin/payouts').then(function (j) {
+      var p = $('pay'); p.innerHTML = ''; if (!j.devs.length) p.appendChild(el('p', 'sub', 'No sales yet.'));
+      j.devs.forEach(function (d) { var c = el('div', 'card'); c.appendChild(el('b', '', d.dev + ' — owed ' + d.balance + ' ' + j.currency + ' (minor units)'));
+        c.appendChild(el('div', 'sub', d.info ? d.info.method + ': ' + d.info.details : 'No payout details yet'));
+        var i = el('input'); i.placeholder = 'amount paid (minor units)'; i.type = 'number'; var b = el('button', '', 'Record payout'); b.onclick = function () { api('POST', '/api/admin/payout', { dev: d.dev, amount: parseInt(i.value, 10) }).then(function () { msg('Recorded'); load(); }).catch(function (e) { msg(e.message); }); };
+        c.appendChild(i); c.appendChild(b); p.appendChild(c); });
+    }).catch(function () {});
+  }
+  load();
+})();
+</script></body></html>

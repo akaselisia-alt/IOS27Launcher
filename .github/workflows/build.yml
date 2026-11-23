@@ -39,12 +39,19 @@ jobs:
         continue-on-error: true
         run: gradle assembleAiDebug --no-daemon
 
+      - name: Build Store APK (separate app)
+        continue-on-error: true
+        run: gradle :store:assembleDebug --no-daemon
+
       - name: Collect APKs
         run: |
           mkdir -p out
           cp app/build/outputs/apk/standard/debug/app-standard-debug.apk out/IOS27Launcher.apk
           if [ -f app/build/outputs/apk/ai/debug/app-ai-debug.apk ]; then
             cp app/build/outputs/apk/ai/debug/app-ai-debug.apk out/IOS27Launcher-AI.apk
+          fi
+          if [ -f store/build/outputs/apk/debug/store-debug.apk ]; then
+            cp store/build/outputs/apk/debug/store-debug.apk out/IOS27Store.apk
           fi
           ls -l out
 
@@ -61,5 +68,6 @@ jobs:
           name: iOS 27 Launcher (latest build)
           body: |
             IOS27Launcher.apk = stable launcher (Android 5.0+).
+            IOS27Store.apk = the separate Store app (browse, install and sell apps; needs your server).
             IOS27Launcher-AI.apk = same launcher plus on-device AI model support (Android 8.0+, bigger download).
           files: out/*.apk

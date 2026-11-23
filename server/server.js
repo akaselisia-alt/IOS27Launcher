@@ -28,10 +28,12 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 // Maps (not plain objects) so an ID like "__proto__" can never touch Object.prototype.
 let users = new Map();
 let tokens = new Map();
+let extra = {};
 try {
   const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
   users = new Map(Object.entries(raw.users || {}));
   tokens = new Map(Object.entries(raw.tokens || {}));
+  extra = raw.extra || {};
 } catch (e) {
   if (e.code !== 'ENOENT') { console.error('Could not read database:', e.message); process.exit(1); }
 }
@@ -41,7 +43,7 @@ function save() { dirty = true; if (!writing) flush(); }
 function flush() {
   writing = true; dirty = false;
   const tmp = DB_FILE + '.tmp';
-  const data = JSON.stringify({ users: Object.fromEntries(users), tokens: Object.fromEntries(tokens) });
+  const data = JSON.stringify({ users: Object.fromEntries(users), tokens: Object.fromEntries(tokens), extra });
   fs.writeFile(tmp, data, { mode: 0o600 }, (err) => {
     if (err) { console.error('save failed:', err.message); writing = false; return; }
     fs.rename(tmp, DB_FILE, (err2) => {
@@ -51,7 +53,7 @@ function flush() {
     });
   });
 }
-function flushSync() { try { fs.writeFileSync(DB_FILE, JSON.stringify({ users: Object.fromEntries(users), tokens: Object.fromEntries(tokens) }), { mode: 0o600 }); } catch (e) { console.error(e.message); } }
+function flushSync() { try { fs.writeFileSync(DB_FILE, JSON.stringify({ users: Object.fromEntries(users), tokens: Object.fromEntries(tokens), extra }), { mode: 0o600 }); } catch (e) { console.error(e.message); } }
 
 // ---- rate limiting ----
 const hits = new Map();
@@ -113,6 +115,7 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0, over = false;
     const chunks = [];
+    const idle = setTimeout(() => { over = true; reject(fail(408, 'Request timed out')); }, 15000);
     req.on('data', (c) => {
       if (over) return;                       // keep draining, but store nothing
       size += c.length;
@@ -120,6 +123,7 @@ function readBody(req) {
       chunks.push(c);
     });
     req.on('end', () => {
+      clearTimeout(idle);
       if (!chunks.length) return resolve({});
       try {
         const v = JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -158,6 +162,8 @@ function validPw(v) { return typeof v === 'string' && v.length >= 8 && v.length 
 function dropTokens(id, exceptKey) {
   for (const [k, v] of tokens) if (v.id === id && k !== exceptKey) tokens.delete(k);
 }
+
+const store = require('./store')({ extra, save: () => save(), authed, readBody, send, fail, limited, DATA_DIR, clientIp, users });
 
 // ---- routes ----
 async function route(req, res) {
@@ -243,6 +249,8 @@ async function route(req, res) {
     return send(res, 200, { id, token, recovery });
   }
 
+  if (await store(req, res, p, url)) return;
+
   // everything below needs a signed-in session
   if (p.startsWith('/api/')) {
     const a = authed(req);
@@ -311,7 +319,7 @@ const server = http.createServer(async (req, res) => {
     send(res, 500, { error: 'Server error' });
   }
 });
-server.requestTimeout = 20000;
+server.requestTimeout = 30 * 60 * 1000;   // big APK uploads on slow connections; JSON bodies have their own 15 s idle limit
 server.headersTimeout = 10000;
 server.listen(PORT, () => console.log('iOS 27 Launcher server listening on :' + PORT + ' (data: ' + DATA_DIR + ')'));
 

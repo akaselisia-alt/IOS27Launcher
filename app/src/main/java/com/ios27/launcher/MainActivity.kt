@@ -240,6 +240,11 @@ class MainActivity : AppCompatActivity() {
     private fun accountPrefs() = getSharedPreferences("account", MODE_PRIVATE)
 
     /** The address the user typed, else the one built into this APK (set by the LAUNCHER_SERVER build variable). */
+    // App store support (download + verify + install, uninstall, file picking, uploads)
+    private val storeSupport = StoreSupport(
+        this, { webView }, { serverBase() }, { accountPrefs().getString("token", "") ?: "" }
+    )
+
     private fun serverBase(): String {
         val s = accountPrefs().getString("server", "") ?: ""
         return if (s.isNotEmpty()) s else BuildConfig.DEFAULT_SERVER
@@ -814,6 +819,27 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun appVersion(): String = BuildConfig.VERSION_NAME
+
+        @JavascriptInterface
+        fun storeInstalled(pkg: String): String = storeSupport.installed(pkg)
+
+        @JavascriptInterface
+        fun storeOpen(pkg: String) = storeSupport.open(pkg)
+
+        @JavascriptInterface
+        fun storeUninstall(pkg: String) = storeSupport.uninstall(pkg)
+
+        @JavascriptInterface
+        fun storeInstall(id: Int, appId: String, sha: String, pkg: String) = storeSupport.install(id, appId, sha, pkg)
+
+        @JavascriptInterface
+        fun storePick(kind: String) = storeSupport.pick(kind)
+
+        @JavascriptInterface
+        fun storeUpload(id: Int, kind: String, path: String) = storeSupport.upload(id, kind, path)
+
+        @JavascriptInterface
+        fun openUrl(url: String) = storeSupport.openUrl(url)
 
         @JavascriptInterface
         fun acctSignOut() {
