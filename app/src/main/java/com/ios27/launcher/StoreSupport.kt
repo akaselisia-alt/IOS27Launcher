@@ -37,7 +37,7 @@ class StoreSupport(
     private val picked = HashMap<String, Uri>()
     private val sizes = HashMap<String, Long>()
     private var pickKind = ""
-    private val actionInstall = "com.ios27.STORE_INSTALL_RESULT." + act.packageName
+    private val actionInstall: String by lazy { "com.ios27.STORE_INSTALL_RESULT." + act.packageName }
     private var receiverReady = false
 
     private val picker = act.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
