@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 rootProject.name = "IOS27Launcher"
 include(":app")
 include(":store")
+include(":phone18")

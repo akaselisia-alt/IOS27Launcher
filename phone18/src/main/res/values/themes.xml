@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.Launcher" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Show the user's wallpaper behind the WebView home screen -->
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

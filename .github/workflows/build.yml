@@ -43,6 +43,10 @@ jobs:
         continue-on-error: true
         run: gradle :store:assembleDebug --no-daemon
 
+      - name: Build Phone 18 launcher (new design)
+        continue-on-error: true
+        run: gradle :phone18:assembleDebug --no-daemon
+
       - name: Collect APKs
         run: |
           mkdir -p out
@@ -52,6 +56,9 @@ jobs:
           fi
           if [ -f store/build/outputs/apk/debug/store-debug.apk ]; then
             cp store/build/outputs/apk/debug/store-debug.apk out/IOS27Store.apk
+          fi
+          if [ -f phone18/build/outputs/apk/debug/phone18-debug.apk ]; then
+            cp phone18/build/outputs/apk/debug/phone18-debug.apk out/Phone18Launcher.apk
           fi
           ls -l out
 
@@ -65,7 +72,8 @@ jobs:
         run: |
           node tools/publish-to-store.js \
             "iOS 27 Launcher|com.ios27.launcher|out/IOS27Launcher.apk|Tools|A home screen launcher with an iOS look, Control Center, Settings, assistant and lock screen." \
-            "iOS 27 Store|com.ios27.store|out/IOS27Store.apk|Tools|The app store for this launcher: browse, install and sell apps."
+            "iOS 27 Store|com.ios27.store|out/IOS27Store.apk|Tools|The app store for this launcher: browse, install and sell apps." \
+            "Phone 18 Launcher|com.ios27.phone18|out/Phone18Launcher.apk|Tools|The new Phone 18 Pro Max home screen with widgets, glass dock, Weather, Store and Control Center."
 
       - name: Upload APKs as build artifacts
         uses: actions/upload-artifact@v4
@@ -80,6 +88,7 @@ jobs:
           name: iOS 27 Launcher (latest build)
           body: |
             IOS27Launcher.apk = stable launcher (Android 5.0+).
+            Phone18Launcher.apk = the new Phone 18 Pro Max design (widgets, glass dock, Store, Weather, Control Center). Installs next to the original launcher.
             IOS27Store.apk = the separate Store app (browse, install and sell apps; needs your server).
             IOS27Launcher-AI.apk = same launcher plus on-device AI model support (Android 8.0+, bigger download).
           files: out/*.apk

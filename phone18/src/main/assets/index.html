@@ -1,0 +1,1820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Phone 18</title>
+<style>
+  :root { --spring: cubic-bezier(.34, 1.32, .64, 1); --ease: cubic-bezier(.22, 1, .36, 1); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  html, body { margin: 0; height: 100%; background: transparent; font-family: -apple-system, system-ui, Roboto, sans-serif; color: #fff; overflow: hidden; overscroll-behavior: none; }
+  body { display: flex; flex-direction: column; }
+  input { user-select: text; -webkit-user-select: text; font-family: inherit; }
+  #wall { position: fixed; inset: 0; z-index: 0; background-size: cover; background-position: center; overflow: hidden; }
+  .blob { position: absolute; width: 95vmax; height: 95vmax; margin: -47vmax 0 0 -47vmax; border-radius: 50%; animation: drift 18s ease-in-out infinite alternate; will-change: transform; }
+  @keyframes drift { from { transform: translate3d(-7vmax,-5vmax,0) scale(1); } to { transform: translate3d(9vmax,7vmax,0) scale(1.18); } }
+  .scrim { position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.30)); }
+  #clock, #pages, #dots, #dock { position: relative; z-index: 1; }
+
+  #clock { text-align: center; padding: 12px 0 2px; flex: none; filter: drop-shadow(0 2px 8px rgba(0,0,0,.25)); }
+  /* Same tall, upright, stretched clock as the lock screen */
+  #time, #lsTime { display: inline-block; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; font-style: normal; transform-origin: 50% 0; background: linear-gradient(180deg, rgba(255,255,255,.98) 10%, rgba(255,255,255,.58) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+  :root { --clk: 100px; }
+  @media (max-height: 720px) { :root { --clk: 82px; } }
+  #time, #lsTime { font-size: var(--clk); letter-spacing: calc(var(--clk) * -0.05); transform: scaleY(1.5); margin-bottom: calc(var(--clk) * .5); }
+  #date, #lsDate { font-size: 18px; font-weight: 600; opacity: .92; letter-spacing: .2px; }
+
+  #pages { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-behavior: smooth; overscroll-behavior: contain; scrollbar-width: none; }
+  #pages::-webkit-scrollbar { display: none; }
+  .page { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; display: grid; grid-template-columns: repeat(var(--cols), 1fr); grid-auto-rows: var(--cell); padding: 10px 6px 0; align-content: start; contain: layout paint; }
+
+  .app { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+  .ico { position: relative; width: var(--ico); height: var(--ico); border-radius: var(--rad); background: rgba(255,255,255,.16); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; overflow: hidden; box-shadow: 0 8px 16px -4px rgba(0,0,0,.38), 0 2px 4px rgba(0,0,0,.2); transition: transform .3s var(--spring), opacity .2s; transform: translateZ(0); }
+  /* Liquid glass: curved specular highlight + soft bottom shade, then a glass rim on top */
+  .ico::before { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 2; pointer-events: none; background: radial-gradient(130% 75% at 28% -12%, rgba(255,255,255,.7) 0, rgba(255,255,255,.2) 42%, rgba(255,255,255,0) 62%), linear-gradient(180deg, rgba(255,255,255,0) 55%, rgba(0,0,0,.17) 100%); }
+  .ico::after { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 3; pointer-events: none; box-shadow: inset 0 1.5px 1px rgba(255,255,255,.8), inset 0 -2px 3px rgba(0,0,0,.25), inset 0 0 0 .75px rgba(255,255,255,.42); }
+  .ico img, .ico svg { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .app:active .ico { transform: scale(.88); opacity: .85; transition-duration: .1s; }
+  .lbl { font-size: 10.5px; max-width: 100%; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+  body.nolabels .lbl { display: none; }
+
+  /* smoothness: each page/icon is its own paint island, off-screen pages cost nothing, wallpaper pauses while a sheet is open */
+  .page { contain: layout paint style; }
+  .app { contain: layout style; -webkit-user-drag: none; }
+  #pages { will-change: scroll-position; }
+  body.sheetOpen .blob { animation-play-state: paused; }
+  .sheet { contain: layout style; backface-visibility: hidden; }
+  #dots { display: flex; justify-content: center; gap: 6px; padding: 4px 0; flex: none; min-height: 14px; }
+  #dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.4); transition: transform .25s var(--spring), background .2s; }
+  #dots i.on { background: #fff; transform: scale(1.25); }
+  #dock { display: flex; justify-content: space-around; align-items: center; margin: 2px 10px 6px; padding: 10px 6px; border-radius: 28px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.3); box-shadow: inset 0 1px 1px rgba(255,255,255,.5), 0 10px 30px rgba(0,0,0,.25); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); flex: none; }
+  #dock .lbl { display: none; }
+
+  #grab { position: fixed; left: 0; right: 0; top: 0; height: 46px; z-index: 5; }
+  #msg { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 40; background: rgba(30,30,36,.94); padding: 10px 16px; border-radius: 16px; font-size: 13px; display: none; max-width: 85%; text-align: center; }
+
+  /* Overlays: GPU-only transitions (transform + opacity), no blur on big layers */
+  .sheet { position: fixed; inset: 0; z-index: 10; display: none; background: rgba(14,14,22,.9); overflow-y: auto; padding: 16px 16px 40px; opacity: 0; transform: translate3d(0, 28px, 0) scale(.975); transition: opacity .22s var(--ease), transform .36s var(--spring); will-change: transform, opacity; overscroll-behavior: contain; }
+  .sheet.show { display: block; }
+  #st, #store, #weather { padding: 0; overflow: hidden; background: #000; }
+  #weatherHost { position: absolute; inset: 0; display: block; }
+  #storeHost { position: absolute; inset: 0; display: block; }
+  #stHost { position: absolute; inset: 0; display: block; }
+  .sheet.in { opacity: 1; transform: none; }
+  .sheet h2 { margin: 4px 0 14px; font-size: 17px; font-weight: 600; text-align: center; }
+  .done { position: absolute; right: 16px; top: 16px; font-size: 14px; color: #7cc4ff; padding: 6px; }
+  .agrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px 4px; }
+
+  /* Control Center */
+  #cc { background: rgba(8,10,28,.5); -webkit-backdrop-filter: blur(28px); backdrop-filter: blur(28px); padding: 0; overflow: hidden; transform: translate3d(0,-22px,0) scale(1.035); transition: opacity .26s ease, transform .5s var(--spring); }
+  #cc.in { transform: none; }
+  #ccHost { position: absolute; inset: 0; display: block; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tile { aspect-ratio: 1; border-radius: 20px; background: rgba(255,255,255,.17); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font-size: 10.5px; text-align: center; padding: 4px; transition: transform .3s var(--spring), background .2s; }
+  .tile svg { width: 25px; height: 25px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .tile.on { background: #fff; color: #111; }
+  .tile.on svg { stroke: #111; }
+  .tile:active { transform: scale(.92); }
+  .wide { grid-column: span 4; border-radius: 20px; background: rgba(255,255,255,.17); padding: 13px 16px; display: flex; align-items: center; gap: 12px; font-size: 12px; }
+  .wide input[type=range] { flex: 1; accent-color: #fff; }
+  .wide.btns { justify-content: space-around; font-size: 22px; }
+  .wide.btns span { padding: 4px 14px; transition: transform .25s var(--spring); }
+  .wide.btns span:active { transform: scale(.88); }
+  .banner { grid-column: span 4; border-radius: 20px; background: rgba(255,170,60,.22); border: 1px solid rgba(255,190,100,.5); padding: 12px 14px; font-size: 12px; line-height: 1.35; display: none; }
+  .banner b { display: block; margin-bottom: 4px; font-size: 13px; }
+  .banner button { margin-top: 8px; }
+  button.pill { background: #fff; color: #111; border: 0; border-radius: 14px; padding: 8px 14px; font-size: 12px; font-weight: 600; }
+  #ccClose { text-align: center; opacity: .7; font-size: 12px; margin-top: 16px; padding: 10px; }
+
+  /* Customize */
+  .sec { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; opacity: .65; margin: 18px 6px 8px; }
+  .card { background: rgba(255,255,255,.12); border-radius: 18px; overflow: hidden; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .row:last-child { border-bottom: 0; }
+  .row input[type=range] { width: 52%; accent-color: #7cc4ff; }
+  .row input[type=text], .row input[type=password] { width: 60%; background: rgba(255,255,255,.12); border: 0; border-radius: 10px; padding: 8px 10px; color: #fff; font-size: 13px; outline: none; }
+  .seg { display: flex; background: rgba(255,255,255,.14); border-radius: 10px; padding: 2px; }
+  .seg span { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+  .seg span.on { background: #fff; color: #111; }
+  .sw { width: 46px; height: 28px; border-radius: 14px; background: rgba(255,255,255,.25); position: relative; flex: none; transition: background .2s; }
+  .sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .3s var(--spring); }
+  .sw.on { background: #34c759; }
+  .sw.on::after { transform: translateX(18px); }
+  .walls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 12px; }
+  .wl { aspect-ratio: 9/14; border-radius: 14px; background-size: cover; background-position: center; border: 2px solid transparent; display: flex; align-items: flex-end; justify-content: center; font-size: 11px; padding-bottom: 6px; text-shadow: 0 1px 3px rgba(0,0,0,.8); transition: transform .3s var(--spring); }
+  .wl:active { transform: scale(.95); }
+  .wl.on { border-color: #fff; }
+  .wl.sys { background: linear-gradient(135deg, #444, #888); }
+  .wl.pick { background: rgba(255,255,255,.14); align-items: center; padding: 0; font-size: 13px; }
+  .small { font-size: 11px; opacity: .6; padding: 0 14px 12px; line-height: 1.4; }
+
+  /* Recent apps */
+  #rcBox { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 18px calc(50% - 115px) 10px; scrollbar-width: none; margin: 0 -16px; }
+  #rcBox::-webkit-scrollbar { display: none; }
+  .rcard { flex: none; width: 230px; height: 380px; scroll-snap-align: center; border-radius: 26px; background: linear-gradient(160deg, rgba(255,255,255,.2), rgba(255,255,255,.08)); display: flex; flex-direction: column; align-items: center; padding: 16px; touch-action: pan-x; transition: transform .38s var(--spring), opacity .25s; }
+  .rcard .rn { font-size: 14px; font-weight: 600; align-self: flex-start; display: flex; align-items: center; gap: 8px; width: 100%; }
+  .rcard .rn .ico { width: 28px; height: 28px; font-size: 13px; }
+  .rcard .big { margin: auto; width: 96px; height: 96px; }
+  .rcard .big.ico { width: 96px; height: 96px; }
+  .rcard .tip { font-size: 11px; opacity: .6; }
+  .empty { text-align: center; padding: 40px 20px; font-size: 14px; line-height: 1.5; opacity: .9; }
+  .empty button { margin: 6px; }
+  .rfoot { text-align: center; margin-top: 12px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+  /* Assistant */
+  #ai { padding: 0; }
+  #ai.show { display: flex; flex-direction: column; }
+  #ai h2 { padding-top: 18px; margin-bottom: 6px; }
+  #aiGear { position: absolute; left: 16px; top: 16px; font-size: 18px; padding: 4px 8px; opacity: .85; }
+  #aiLog { flex: 1; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .b { max-width: 84%; padding: 10px 14px; border-radius: 18px; font-size: 14px; line-height: 1.38; user-select: text; -webkit-user-select: text; white-space: pre-wrap; animation: pop .3s var(--spring); }
+  @keyframes pop { from { transform: scale(.9) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .b.me { align-self: flex-end; background: #0a84ff; border-bottom-right-radius: 6px; }
+  .b.bot { align-self: flex-start; background: rgba(255,255,255,.16); border-bottom-left-radius: 6px; }
+  #aiSet { display: none; padding: 0 14px; }
+  #aiSet.open { display: block; }
+  #aiBar { display: flex; gap: 8px; padding: 10px 12px 14px; align-items: center; }
+  #aiIn { flex: 1; background: rgba(255,255,255,.14); border: 0; border-radius: 22px; padding: 12px 16px; color: #fff; font-size: 15px; outline: none; }
+  #aiBar button { width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(255,255,255,.18); color: #fff; font-size: 18px; flex: none; transition: transform .25s var(--spring); }
+  #aiBar button:active { transform: scale(.88); }
+  #aiSend { background: #0a84ff !important; }
+
+  /* Lock screen */
+  #ls { position: fixed; inset: 0; z-index: 20; display: none; transform: translate3d(0,0,0); transition: transform .55s var(--ease), filter .55s var(--ease), opacity .5s var(--ease); background: #101018; overflow: hidden; touch-action: none; will-change: transform; }
+  #ls.show { display: block; }
+  #ls.leaving { transform: translate3d(0,-10%,0) scale(1.06); filter: blur(36px); opacity: 0; }
+  /* Home screen is blurred and slightly zoomed while locked, then sharpens as you unlock */
+  #clock, #pages, #dots, #dock { transition: filter .6s var(--ease), transform .6s var(--ease), opacity .5s var(--ease); }
+  body.locked #pages, body.locked #dots, body.locked #dock { filter: blur(calc(20px * (1 - var(--p, 0)))); transform: scale(calc(1.07 - .07 * var(--p, 0))); opacity: calc(.55 + .45 * var(--p, 0)); }
+  body.locked #clock { filter: drop-shadow(0 2px 8px rgba(0,0,0,.25)) blur(calc(20px * (1 - var(--p, 0)))); transform: scale(calc(1.07 - .07 * var(--p, 0))); opacity: calc(.55 + .45 * var(--p, 0)); }
+  body.unlocking #pages, body.unlocking #dots, body.unlocking #dock { filter: blur(0px); transform: none; opacity: 1; }
+  body.unlocking #clock { filter: drop-shadow(0 2px 8px rgba(0,0,0,.25)) blur(0px); transform: none; opacity: 1; }
+  body.dragging #clock, body.dragging #pages, body.dragging #dots, body.dragging #dock { transition: none; }
+  #lsWall { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  #lsTop { position: absolute; top: 8%; left: 0; right: 0; text-align: center; filter: drop-shadow(0 2px 14px rgba(0,0,0,.25)); }
+  #lsLock { height: 20px; margin-bottom: 8px; opacity: .9; }
+  #lsLock svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #lsBtns { position: absolute; left: 0; right: 0; bottom: 74px; display: flex; justify-content: space-between; padding: 0 44px; }
+  .gl { width: 54px; height: 54px; border-radius: 50%; background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.3); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; transition: transform .3s var(--spring), background .2s; }
+  .gl:active { transform: scale(.9); }
+  .gl.on { background: #fff; }
+  .gl svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .gl.on svg { stroke: #111; }
+  #lsHint { position: absolute; bottom: 30px; left: 0; right: 0; text-align: center; font-size: 13px; opacity: .8; animation: bob 2.2s ease-in-out infinite; }
+  @keyframes bob { 0%,100% { transform: translateY(0); opacity: .55; } 50% { transform: translateY(-6px); opacity: .95; } }
+  #lsBar { position: absolute; bottom: 10px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: rgba(255,255,255,.85); }
+</style>
+<style id="p18">
+  /* Phone 18 Pro Max skin: big-phone home screen with widgets, glass dock and search pill (original design, no Apple artwork) */
+  :root { --sf: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, Roboto, sans-serif; }
+  html, body { font-family: var(--sf); letter-spacing: -.1px; }
+  #clock { display: none; }
+  #pages { padding-top: 44px; }
+  .page { padding: 8px 14px 0; }
+  .lbl { font-size: 11px; font-weight: 500; letter-spacing: .1px; text-shadow: 0 1px 4px rgba(0,0,0,.45); }
+  .ico { box-shadow: 0 6px 16px rgba(0,0,0,.28); }
+  #dock { margin: 2px 14px 10px; padding: 12px 8px; border-radius: 38px; background: rgba(255,255,255,.16); border: .5px solid rgba(255,255,255,.34);
+          backdrop-filter: blur(28px) saturate(1.7); -webkit-backdrop-filter: blur(28px) saturate(1.7); box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 10px 30px rgba(0,0,0,.22); }
+  #psearch { align-self: center; flex: none; margin: 0 0 8px; padding: 7px 22px; border-radius: 18px; font-size: 13.5px; font-weight: 500; color: #fff; display: flex; gap: 7px; align-items: center;
+             background: rgba(255,255,255,.2); border: .5px solid rgba(255,255,255,.3); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); position: relative; z-index: 1; }
+  #psearch svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+  .wrow { grid-column: 1 / -1; grid-row: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 4px 0 12px; }
+  .wg { border-radius: 26px; padding: 14px 16px; position: relative; overflow: hidden; color: #fff; text-shadow: none;
+        background: rgba(255,255,255,.2); border: .5px solid rgba(255,255,255,.34); backdrop-filter: blur(24px) saturate(1.6); -webkit-backdrop-filter: blur(24px) saturate(1.6);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 22px rgba(0,0,0,.18); }
+  .wg small { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; opacity: .8; display: block; }
+  .wg .big { font-size: 42px; font-weight: 300; line-height: 1.05; margin-top: 6px; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+  .wg .t { font-size: 13px; opacity: .85; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wg:active { transform: scale(.97); transition: transform .12s; }
+</style>
+</head>
+<body>
+  <div id="wall"></div>
+  <div id="grab"></div>
+  <div id="clock"><div id="date"></div><div id="time"></div></div>
+  <div id="pages"></div>
+  <div id="dots"></div>
+  <div id="psearch" role="button"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>Search</div>
+  <div id="dock"></div>
+  <div id="msg"></div>
+
+  <!-- App Library -->
+  <div id="lib" class="sheet">
+    <div class="done" id="libDone">Done</div>
+    <h2>App Library</h2>
+    <div class="agrid" id="libGrid"></div>
+  </div>
+
+  <!-- Recent apps -->
+  <div id="rc" class="sheet">
+    <div class="done" id="rcDone">Done</div>
+    <h2>Recent Apps</h2>
+    <div id="rcBody"></div>
+  </div>
+
+  <!-- Assistant -->
+  <div id="ai" class="sheet">
+    <div class="done" id="aiDone">Done</div>
+    <div id="aiGear">&#9881;&#xFE0E;</div>
+    <h2>Assistant</h2>
+    <div id="aiSet">
+      <div class="card">
+        <div class="row"><span>On-device AI</span><span id="llmState" style="opacity:.75;font-size:13px"></span></div>
+        <div class="row"><span>Use it when I don't understand</span><div class="sw" id="llmOn"></div></div>
+        <div class="row"><button class="pill" id="llmPick">Import model file</button><button class="pill" id="llmDel">Remove model</button></div>
+        <div class="small" id="llmHelp"></div>
+      </div>
+    </div>
+    <div id="aiLog"></div>
+    <div id="aiBar"><input id="aiIn" type="text" placeholder="Tell me what to do..." autocomplete="off"><button id="aiMic">&#127908;</button><button id="aiSend">&#8593;</button></div>
+  </div>
+
+  <!-- Store (built by store-ui.js inside a shadow root) -->
+  <div id="store" class="sheet"><div id="storeHost"></div></div>
+  <div id="weather" class="sheet"><div id="weatherHost"></div></div>
+
+  <!-- Settings app (built in script, inside a shadow root) -->
+  <div id="st" class="sheet"><div id="stHost"></div></div>
+
+  <!-- Customize app -->
+  <div id="cz" class="sheet">
+    <div class="done" id="czDone">Done</div>
+    <h2>Customize</h2>
+
+    <div class="sec">Wallpaper</div>
+    <div class="card"><div class="walls" id="walls"></div></div>
+
+    <div class="sec">Icons</div>
+    <div class="card">
+      <div class="row"><span>Icon size</span><input id="czSize" type="range" min="40" max="64" step="1"></div>
+      <div class="row"><span>Columns</span><div class="seg" id="czCols"></div></div>
+      <div class="row"><span>Shape</span><div class="seg" id="czShape"></div></div>
+      <div class="row"><span>App names</span><div class="sw" id="czLabels"></div></div>
+    </div>
+
+    <div class="sec">Home screen</div>
+    <div class="card">
+      <div class="row"><span>Show clock</span><div class="sw" id="czClock"></div></div>
+      <div class="row"><span>iOS lock screen after unlock</span><div class="sw" id="czLock"></div></div>
+      <div class="row"><span>Screen refresh rate</span><span id="czHz" style="opacity:.75;font-size:13px"></span></div>
+    </div>
+    <div class="small">Android's own lock screen can't be replaced, so this one appears right after you unlock the phone. It is for looks, not security.</div>
+
+    <div class="sec">Dock (pick up to 4)</div>
+    <div class="card" id="czDock"></div>
+
+    <div class="sec">Hide apps from Home</div>
+    <div class="card" id="czHide"></div>
+    <div class="small">Hidden apps stay in the App Library (swipe up on Home).</div>
+
+    <div class="sec"> </div>
+    <div class="card"><div class="row" id="czReset" style="color:#ff6b6b;justify-content:center">Reset everything</div></div>
+  </div>
+
+  <!-- Control Center -->
+  <div id="cc" class="sheet"><div id="ccHost"></div></div>
+
+  <!-- iOS-style lock screen -->
+  <div id="ls">
+    <div id="lsWall"></div>
+    <div id="lsTop">
+      <div id="lsLock"><svg viewBox="0 0 24 24"><path d="M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+      <div id="lsDate"></div>
+      <div id="lsTime"></div>
+    </div>
+    <div id="lsBtns">
+      <div class="gl" id="lsTorch"><svg viewBox="0 0 24 24"><path d="M9 2h6l-1 6h-4zM10 8v5l-2 2v7h8v-7l-2-2V8"/></svg></div>
+      <div class="gl" id="lsCam"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4zM12 13m-3.5 0a3.5 3.5 0 1 0 7 0 3.5 3.5 0 1 0-7 0"/></svg></div>
+    </div>
+    <div id="lsHint">Swipe up to open</div>
+    <div id="lsBar"></div>
+  </div>
+
+<script src="store-ui.js"></script>
+<script src="weather-ui.js"></script>
+<script>
+(function () {
+  var A = window.Android;
+  var $ = function (id) { return document.getElementById(id); };
+  var msgT;
+  var acct = { server: '', id: '', signedIn: false }, syncT;
+  var syncState = (function () { try { return Object.assign({ auto: true, last: 0 }, JSON.parse(localStorage.getItem('ios27sync') || '{}')); } catch (e) { return { auto: true, last: 0 }; } })();
+  function msg(t) { var m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(msgT); msgT = setTimeout(function () { m.style.display = 'none'; }, 2600); }
+
+  /* ---------- Settings ---------- */
+  var DEF = { wall: 'liquid', cols: 4, size: 54, labels: true, shape: 'squircle', clock: true, lockscreen: true, hidden: [], dock: [] };
+  var cfg = load();
+  function load() { try { return Object.assign({}, DEF, JSON.parse(localStorage.getItem('ios27cfg') || '{}')); } catch (e) { return Object.assign({}, DEF); } }
+  function saveLocal() { try { localStorage.setItem('ios27cfg', JSON.stringify(cfg)); } catch (e) {} }
+  function save() { saveLocal(); scheduleSync(); }
+  function customWall() { try { return localStorage.getItem('ios27wall') || ''; } catch (e) { return ''; } }
+
+  function mesh(base, blobs) {
+    return blobs.map(function (b) { return 'radial-gradient(' + b[2] + '% ' + b[3] + '% at ' + b[0] + '% ' + b[1] + '%, ' + b[4] + ' 0, transparent 62%)'; }).join(', ') + ', ' + base;
+  }
+  // [id, name, base colour, blobs [x%, y%, rx%, ry%, colour], live?]
+  var DEFS = [
+    ['aurora', 'Aurora', '#1c1346', [[18,14,60,42,'#ff7ad9'],[88,22,55,40,'#6c5cff'],[72,88,75,50,'#2fb7ff'],[8,92,60,44,'#ffb35c']]],
+    ['liquid', 'Liquid', '#0b1030', [[20,12,60,40,'#ff4fa3'],[85,28,55,42,'#7a5cff'],[30,60,70,45,'#27c3ff'],[80,88,70,48,'#ff9f43'],[10,95,60,40,'#ffd166']]],
+    ['liquidlive', 'Liquid', '#0b1030', [[20,12,60,40,'#ff4fa3'],[85,28,55,42,'#7a5cff'],[30,60,70,45,'#27c3ff'],[80,88,70,48,'#ff9f43']], true],
+    ['auroralive', 'Aurora', '#1c1346', [[18,14,60,42,'#ff7ad9'],[88,22,55,40,'#6c5cff'],[72,88,75,50,'#2fb7ff'],[8,92,60,44,'#ffb35c']], true],
+    ['dusk', 'Dusk', '#2a1448', [[80,10,70,45,'#ffcf6b'],[15,55,70,50,'#ff5f8f'],[70,95,80,55,'#5a3bd6']]],
+    ['sunrise', 'Sunrise', '#3a1c5a', [[50,95,90,55,'#ffb347'],[20,60,70,45,'#ff6b6b'],[85,25,60,40,'#ffd1a8']]],
+    ['lagoon', 'Lagoon', '#06284a', [[20,12,60,40,'#7dffd6'],[85,50,70,50,'#2a8cff'],[25,95,70,45,'#1fd1b5']]],
+    ['ocean', 'Ocean', '#031a3a', [[50,90,90,50,'#00b4d8'],[15,40,60,45,'#0077b6'],[85,15,55,40,'#90e0ef']]],
+    ['glacier', 'Glacier', '#0d2a3c', [[20,15,60,40,'#bdf4ff'],[85,50,65,45,'#4cc9f0'],[30,95,70,45,'#a0c4ff']]],
+    ['bloom', 'Bloom', '#6a4fa8', [[80,12,60,40,'#ffd1e8'],[12,45,70,50,'#c9b6ff'],[80,90,70,50,'#ffb59a']]],
+    ['candy', 'Candy', '#7b2ff7', [[15,15,60,40,'#ff7eb3'],[85,40,60,45,'#ffd6e8'],[40,90,70,45,'#6dd5ed']]],
+    ['orchid', 'Orchid', '#2b0a3d', [[20,20,60,45,'#e056fd'],[85,45,60,45,'#7d5fff'],[40,95,70,45,'#ff9ff3']]],
+    ['ruby', 'Ruby', '#2a0510', [[20,20,60,45,'#ff2e63'],[85,70,65,45,'#8f0a2c']]],
+    ['ember', 'Ember', '#1a0505', [[50,100,90,55,'#ff4500'],[20,50,60,45,'#c1121f'],[85,20,55,40,'#ff9f1c']]],
+    ['forest', 'Forest', '#06220f', [[20,20,60,45,'#2e8b57'],[85,60,65,45,'#9be15d'],[40,100,70,40,'#0f5132']]],
+    ['mint', 'Mint', '#0f4c3a', [[25,15,60,40,'#b8f2e6'],[80,60,65,45,'#5eead4']]],
+    ['sand', 'Sand', '#c8a27a', [[20,15,60,40,'#ffe5c4'],[85,70,65,45,'#a9714b']]],
+    ['neon', 'Neon', '#05010f', [[15,20,55,40,'#00f5d4'],[85,30,55,40,'#f15bb5'],[50,90,70,45,'#9b5de5']]],
+    ['cosmic', 'Cosmic', '#0a0420', [[20,20,45,32,'#7b2ff7'],[80,25,40,28,'#f107a3'],[50,80,65,42,'#2a1b8f']]],
+    ['storm', 'Storm', '#1a1f2b', [[20,15,60,40,'#6c7a96'],[85,70,65,45,'#2d3a55'],[50,100,80,40,'#8aa0c8']]],
+    ['midnight', 'Midnight', '#07070f', [[20,15,60,40,'#2b2f77'],[85,70,70,45,'#4a1d6e']]],
+    ['graphite', 'Graphite', '#12141a', [[25,15,70,45,'#5a6173'],[85,85,70,50,'#3a4a6a']]],
+    ['mono', 'Silver', '#cfd3dc', [[20,15,60,40,'#ffffff'],[85,80,70,45,'#9aa3b5']]]
+  ];
+  var WALLS = {};
+  DEFS.forEach(function (d) { WALLS[d[0]] = { name: d[1] + (d[4] ? ' ● Live' : ''), base: d[2], blobs: d[3], css: mesh(d[2], d[3]), live: !!d[4] }; });
+  var SCRIM = 'linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.30))';
+
+  function applyWall() {
+    var w = $('wall'), l = $('lsWall'), bg;
+    w.innerHTML = '';
+    if (cfg.wall === 'system') { w.style.background = SCRIM; l.style.background = WALLS.liquid.css; $('ls').style.background = '#101018'; return; }
+    if (cfg.wall === 'custom' && customWall()) { bg = SCRIM + ', url("' + customWall() + '") center/cover'; w.style.background = bg; l.style.background = bg; return; }
+    var p = WALLS[cfg.wall] || WALLS.liquid;
+    l.style.background = SCRIM + ', ' + p.css;
+    if (p.live) {
+      w.style.background = p.base;
+      p.blobs.forEach(function (b, i) {
+        var d = document.createElement('div'); d.className = 'blob';
+        d.style.left = b[0] + '%'; d.style.top = b[1] + '%';
+        d.style.background = 'radial-gradient(circle, ' + b[4] + ' 0, transparent 62%)';
+        d.style.animationDuration = (16 + i * 5) + 's'; d.style.animationDelay = (-i * 4) + 's';
+        w.appendChild(d);
+      });
+      var sc = document.createElement('div'); sc.className = 'scrim'; w.appendChild(sc);
+    } else w.style.background = SCRIM + ', ' + p.css;
+  }
+
+  var RADIUS = { squircle: '22%', circle: '50%', square: '10%' };
+  function applyCfg() {
+    document.documentElement.style.setProperty('--rad', RADIUS[cfg.shape] || '22%');
+    document.documentElement.style.setProperty('--cols', cfg.cols);
+    document.body.classList.toggle('nolabels', !cfg.labels);
+    $('clock').style.display = cfg.clock ? '' : 'none';
+    applyWall();
+  }
+
+  /* ---------- Apps ---------- */
+  var VIRT = {
+    '__weather__': { name: 'Weather', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gwx" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4aa8ff"/><stop offset="1" stop-color="#2a5fe0"/></linearGradient></defs><rect width="48" height="48" fill="url(#gwx)"/><circle cx="19" cy="19" r="7.5" fill="#ffd24a"/><path d="M15 36a6.5 6.5 0 0 1 .8-12.9A8.5 8.5 0 0 1 32 25a5.8 5.8 0 0 1-.6 11z" fill="#fff"/></svg>' },
+    '__store__': { name: 'Store', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gst" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ec1ff"/><stop offset="1" stop-color="#0a47ce"/></linearGradient></defs><rect width="48" height="48" fill="url(#gst)"/><path d="M12 18h24l2 20a2 2 0 0 1-2 2H12a2 2 0 0 1-2-2z" fill="#fff"/><path d="M17 22v-4a7 7 0 0 1 14 0v4" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><path d="M18 27c0 6 12 6 12 0" fill="none" stroke="#1d6bf0" stroke-width="3" stroke-linecap="round"/></svg>' },
+    '__settings__': { name: 'Settings', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9aa0b4"/><stop offset="1" stop-color="#4a4e60"/></linearGradient></defs><rect width="48" height="48" fill="url(#gs)"/><circle cx="24" cy="24" r="7" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M24 8v6M24 34v6M8 24h6M34 24h6M12.7 12.7l4.2 4.2M31.1 31.1l4.2 4.2M35.3 12.7l-4.2 4.2M16.9 31.1l-4.2 4.2" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/></svg>' },
+    '__apps__':   { name: 'Apps', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="ga" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b6078"/><stop offset="1" stop-color="#1f2030"/></linearGradient></defs><rect width="48" height="48" fill="url(#ga)"/><rect x="10" y="10" width="12" height="12" rx="3.5" fill="#fff" opacity=".95"/><rect x="26" y="10" width="12" height="12" rx="3.5" fill="#fff" opacity=".75"/><rect x="10" y="26" width="12" height="12" rx="3.5" fill="#fff" opacity=".75"/><rect x="26" y="26" width="12" height="12" rx="3.5" fill="#fff" opacity=".95"/></svg>' },
+    '__custom__': { name: 'Customize', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b48bff"/><stop offset="1" stop-color="#4f35e8"/></linearGradient></defs><rect width="48" height="48" fill="url(#gc)"/><path d="M10 16h28M10 24h28M10 32h28" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".45"/><circle cx="18" cy="16" r="4.5" fill="#fff"/><circle cx="31" cy="24" r="4.5" fill="#fff"/><circle cx="21" cy="32" r="4.5" fill="#fff"/></svg>' },
+    '__ai__':     { name: 'Assistant', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5fa2"/><stop offset=".5" stop-color="#8f5cff"/><stop offset="1" stop-color="#2fb7ff"/></linearGradient></defs><rect width="48" height="48" fill="#12121a"/><circle cx="24" cy="24" r="14" fill="url(#gg)"/><circle cx="24" cy="24" r="8" fill="#12121a" opacity=".5"/><circle cx="20" cy="19" r="3" fill="#fff" opacity=".55"/></svg>' }
+  };
+  function gradFor(n) { var x = 0; for (var i = 0; i < n.length; i++) x = (x * 31 + n.charCodeAt(i)) % 360; return 'linear-gradient(135deg, hsl(' + x + ',78%,64%), hsl(' + ((x + 45) % 360) + ',78%,46%))'; }
+
+  function getApps() {
+    if (A) { try { return JSON.parse(A.getApps()); } catch (e) {} }
+    return ['Phone','Messages','Camera','Browser','Maps','Mail','Photos','Music','Clock','Notes','Files','Settings','WhatsApp']
+      .map(function (n) { return { name: n, pkg: 'demo.' + n.toLowerCase() }; });
+  }
+
+  function iconInto(ico, app) {
+    var v = VIRT[app.pkg];
+    if (v) { ico.innerHTML = v.svg; return; }
+    ico.textContent = app.name.charAt(0).toUpperCase(); ico.style.background = gradFor(app.name);
+    if (A) setTimeout(function () {
+      var src = A.getIcon(app.pkg);
+      if (src) { var img = new Image(); img.src = src; ico.textContent = ''; ico.style.background = 'transparent'; ico.appendChild(img); }
+    }, 0);
+  }
+
+  function tile(app) {
+    var el = document.createElement('div'); el.className = 'app';
+    var ico = document.createElement('div'); ico.className = 'ico';
+    var lbl = document.createElement('div'); lbl.className = 'lbl'; lbl.textContent = app.name;
+    el.appendChild(ico); el.appendChild(lbl);
+    iconInto(ico, app);
+    el.addEventListener('click', function () {
+      if (app.pkg === '__apps__') openLib();
+      else if (app.pkg === '__custom__') openCz();
+      else if (app.pkg === '__ai__') openAI();
+      else if (app.pkg === '__settings__') openSt();
+      else if (app.pkg === '__store__') openStore();
+      else if (app.pkg === '__weather__') openWeather();
+      else if (A) { closeAll(); A.openApp(app.pkg); }
+    });
+    return el;
+  }
+
+  function layout() {
+    var pages = $('pages');
+    var w = pages.clientWidth || window.innerWidth;
+    var h = pages.clientHeight || 400;
+    var ico = Math.max(38, Math.min(cfg.size, Math.floor(w / cfg.cols - 14)));
+    var cell = ico + (cfg.labels ? 30 : 16);
+    var rows = Math.max(3, Math.floor((h - 12) / cell));
+    var r = document.documentElement.style;
+    r.setProperty('--ico', ico + 'px'); r.setProperty('--cell', cell + 'px');
+    return rows * cfg.cols;
+  }
+
+  var lastPer = 0;
+  function render() {
+    var per = layout(); lastPer = per;
+    var all = getApps();
+    var home = all.filter(function (a) { return cfg.hidden.indexOf(a.pkg) < 0; });
+
+    var dockApps = [];
+    if (cfg.dock.length) {
+      cfg.dock.forEach(function (p) { var i = home.findIndex(function (a) { return a.pkg === p; }); if (i >= 0) dockApps.push(home.splice(i, 1)[0]); });
+    } else {
+      [/dialer/, /messag/, /camera/, /chrome|browser/].forEach(function (re) {
+        var i = home.findIndex(function (a) { return re.test(a.pkg.toLowerCase()); });
+        if (i >= 0) dockApps.push(home.splice(i, 1)[0]);
+      });
+    }
+    var dock = $('dock'); dock.innerHTML = '';
+    dockApps.forEach(function (a) { dock.appendChild(tile(a)); });
+    dock.appendChild(tile({ name: 'Apps', pkg: '__apps__' }));
+
+    home.unshift({ name: 'Settings', pkg: '__settings__' });
+    home.unshift({ name: 'Weather', pkg: '__weather__' });
+    home.unshift({ name: 'Store', pkg: '__store__' });
+    home.unshift({ name: 'Customize', pkg: '__custom__' });
+    home.unshift({ name: 'Assistant', pkg: '__ai__' });
+    var pages = $('pages'), dots = $('dots');
+    pages.innerHTML = ''; dots.innerHTML = '';
+    var i = 0, first = true;
+    while (i < home.length || first) {
+      var cap = first ? Math.max(cfg.cols, per - 2 * cfg.cols) : per;
+      var p = document.createElement('div'); p.className = 'page';
+      if (first) p.appendChild(widgets());
+      home.slice(i, i + cap).forEach(function (a) { p.appendChild(tile(a)); });
+      pages.appendChild(p);
+      dots.appendChild(document.createElement('i'));
+      i += cap; first = false;
+    }
+    updateDots();
+  }
+
+  /* Home screen widgets: live clock + the last weather you looked at */
+  function widgets() {
+    var row = document.createElement('div'); row.className = 'wrow';
+    var c = document.createElement('div'); c.className = 'wg';
+    c.innerHTML = '<small id="wgDate"></small><div class="big" id="wgTime"></div><div class="t">Local time</div>';
+    c.addEventListener('click', function () { if (A) { closeAll(); A.openApp('com.google.android.deskclock'); } });
+    var w = document.createElement('div'); w.className = 'wg';
+    var place = null, cache = null;
+    try { place = JSON.parse(localStorage.getItem('wx.place')); cache = JSON.parse(localStorage.getItem('wx.cache')); } catch (e) {}
+    if (place && cache && cache.d && cache.d.current) {
+      var k = cache.d.current, dl = cache.d.daily;
+      w.innerHTML = '<small>' + String(place.name).replace(/[<>&]/g, '') + '</small><div class="big">' + Math.round(k.temperature_2m) + '\u00b0</div><div class="t">H:' + Math.round(dl.temperature_2m_max[0]) + '\u00b0  L:' + Math.round(dl.temperature_2m_min[0]) + '\u00b0</div>';
+    } else {
+      w.innerHTML = '<small>Weather</small><div class="big">\u2600\ufe0e</div><div class="t">Tap to set your city</div>';
+    }
+    w.addEventListener('click', function () { openWeather(); });
+    row.appendChild(c); row.appendChild(w);
+    setTimeout(tick, 0);
+    return row;
+  }
+
+  function updateDots() {
+    var pages = $('pages');
+    var idx = Math.round(pages.scrollLeft / Math.max(pages.clientWidth, 1));
+    document.querySelectorAll('#dots i').forEach(function (d, i) { d.classList.toggle('on', i === idx); });
+  }
+  var rafPending = false;
+  $('pages').addEventListener('scroll', function () {
+    if (rafPending) return; rafPending = true;
+    requestAnimationFrame(function () { rafPending = false; updateDots(); });
+  }, { passive: true });
+  window.addEventListener('resize', function () { if (layout() !== lastPer) render(); });
+
+  function tick() {
+    var d = new Date();
+    var t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/ ?[AP]M/i, '');
+    var dt = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    $('time').textContent = t; $('date').textContent = dt;
+    $('lsTime').textContent = t; $('lsDate').textContent = dt;
+    var gt = $('wgTime'); if (gt) { gt.textContent = t; $('wgDate').textContent = d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' }); }
+  }
+  tick(); setInterval(tick, 5000);
+
+  /* ---------- Sheets (spring in/out) ---------- */
+  var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), stg = $('st'), stor = $('store'), wxs = $('weather'), ls = $('ls');
+  function isOpen(el) { return el.classList.contains('in'); }
+  function show(el) { el.classList.add('show'); void el.offsetWidth; el.classList.add('in'); document.body.classList.add('sheetOpen'); }
+  function hide(el) {
+    if (!el.classList.contains('show')) return;
+    el.classList.remove('in');
+    setTimeout(function () {
+      if (el.classList.contains('in')) return;
+      el.classList.remove('show');
+      if (!anyShown()) document.body.classList.remove('sheetOpen');
+      if (el === stg) { stShadow.innerHTML = ''; stack = []; }
+    }, 300);
+  }
+  function anyShown() { return [lib, cz, cc, rc, ai, stg, stor, wxs].some(function (e) { return e.classList.contains('show'); }); }
+  function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai) || isOpen(stg) || isOpen(stor) || isOpen(wxs); }
+  function closeAll() { [lib, cz, cc, rc, ai, stg, stor, wxs].forEach(hide); }
+  ['libDone', 'czDone', 'rcDone', 'aiDone'].forEach(function (id) { $(id).addEventListener('click', closeAll); });
+
+  function openLib() {
+    closeAll();
+    var g = $('libGrid'); g.innerHTML = '';
+    getApps().forEach(function (a) { g.appendChild(tile(a)); });
+    show(lib);
+  }
+
+  /* ---------- Customize ---------- */
+  function seg(el, opts, cur, cb) {
+    el.innerHTML = '';
+    opts.forEach(function (o) {
+      var s = document.createElement('span'); s.textContent = o[1]; if (String(o[0]) === String(cur)) s.className = 'on';
+      s.addEventListener('click', function () { cb(o[0]); seg(el, opts, o[0], cb); });
+      el.appendChild(s);
+    });
+  }
+  function sw(el, val, cb) {
+    el.classList.toggle('on', !!val);
+    el.onclick = function () { var v = !el.classList.contains('on'); el.classList.toggle('on', v); cb(v); };
+  }
+  function changed() { save(); applyCfg(); render(); }
+
+  function buildWalls() {
+    var box = $('walls'); box.innerHTML = '';
+    Object.keys(WALLS).forEach(function (k) {
+      var d = document.createElement('div'); d.className = 'wl' + (cfg.wall === k ? ' on' : '');
+      d.style.background = WALLS[k].css; d.textContent = WALLS[k].name;
+      d.onclick = function () { cfg.wall = k; save(); applyWall(); buildWalls(); };
+      box.appendChild(d);
+    });
+    var s = document.createElement('div'); s.className = 'wl sys' + (cfg.wall === 'system' ? ' on' : ''); s.textContent = 'My wallpaper';
+    s.onclick = function () { cfg.wall = 'system'; save(); applyWall(); buildWalls(); };
+    box.appendChild(s);
+    if (customWall()) {
+      var c = document.createElement('div'); c.className = 'wl' + (cfg.wall === 'custom' ? ' on' : '');
+      c.style.backgroundImage = 'url("' + customWall() + '")'; c.textContent = 'Photo';
+      c.onclick = function () { cfg.wall = 'custom'; save(); applyWall(); buildWalls(); };
+      box.appendChild(c);
+    }
+    var p = document.createElement('div'); p.className = 'wl pick'; p.textContent = '+ Choose photo';
+    p.onclick = function () { if (A) A.pickWallpaper(); else msg('Only works inside the launcher app'); };
+    box.appendChild(p);
+  }
+  window.onWallpaper = function (data) {
+    try { localStorage.setItem('ios27wall', data); } catch (e) { msg('Photo too large to save'); return; }
+    cfg.wall = 'custom'; save(); applyWall(); buildWalls();
+  };
+
+  function listRow(parent, app, isOn, toggleFn) {
+    var r = document.createElement('div'); r.className = 'row'; r.innerHTML = '<span></span><div class="sw"></div>';
+    r.firstChild.textContent = app.name;
+    var s = r.lastChild; s.classList.toggle('on', isOn());
+    s.onclick = function () { if (toggleFn() !== false) s.classList.toggle('on', isOn()); };
+    parent.appendChild(r);
+  }
+  function buildLists() {
+    var apps = getApps();
+    var dock = $('czDock'); dock.innerHTML = '';
+    apps.forEach(function (a) {
+      listRow(dock, a, function () { return cfg.dock.indexOf(a.pkg) >= 0; }, function () {
+        var i = cfg.dock.indexOf(a.pkg);
+        if (i >= 0) cfg.dock.splice(i, 1);
+        else { if (cfg.dock.length >= 4) { msg('The dock holds 4 apps'); return false; } cfg.dock.push(a.pkg); }
+        changed();
+      });
+    });
+    var hide = $('czHide'); hide.innerHTML = '';
+    apps.forEach(function (a) {
+      listRow(hide, a, function () { return cfg.hidden.indexOf(a.pkg) >= 0; }, function () {
+        var i = cfg.hidden.indexOf(a.pkg);
+        if (i >= 0) cfg.hidden.splice(i, 1); else cfg.hidden.push(a.pkg);
+        changed();
+      });
+    });
+  }
+
+  function openCz() {
+    closeAll();
+    buildWalls(); buildLists();
+    $('czSize').value = cfg.size;
+    $('czSize').oninput = function (e) { cfg.size = parseInt(e.target.value, 10); changed(); };
+    seg($('czCols'), [[4, '4'], [5, '5']], cfg.cols, function (v) { cfg.cols = v; changed(); });
+    seg($('czShape'), [['squircle', 'Rounded'], ['circle', 'Circle'], ['square', 'Square']], cfg.shape, function (v) { cfg.shape = v; changed(); });
+    sw($('czLabels'), cfg.labels, function (v) { cfg.labels = v; changed(); });
+    sw($('czClock'), cfg.clock, function (v) { cfg.clock = v; changed(); });
+    sw($('czLock'), cfg.lockscreen, function (v) { cfg.lockscreen = v; save(); });
+    $('czHz').textContent = A ? (A.getHz() + ' Hz (max for this screen)') : '\u2014';
+    $('czReset').onclick = function () {
+      cfg = Object.assign({}, DEF, { hidden: [], dock: [] }); save();
+      try { localStorage.removeItem('ios27wall'); } catch (e) {}
+      applyCfg(); render(); openCz(); msg('Reset to defaults');
+    };
+    show(cz);
+  }
+
+  /* ---------- Control Center ---------- */
+  var IC = {
+    wifi: 'M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01',
+    bt: 'M7 7l10 10-5 4V3l5 4L7 17',
+    data: 'M5 20v-4M10 20v-8M15 20V8M20 20V4',
+    air: 'M21 15l-8-4V5a1 1 0 0 0-2 0v6l-8 4v2l8-2v4l-2 1v1l3-.5 3 .5v-1l-2-1v-4l8 2z',
+    torch: 'M9 2h6l-1 6h-4zM10 8v5l-2 2v7h8v-7l-2-2V8',
+    dnd: 'M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z',
+    rotate: 'M4 12a8 8 0 0 1 14-5l2-2v6h-6l2.3-2.3A5.5 5.5 0 0 0 6 12M20 12a8 8 0 0 1-14 5l-2 2v-6h6l-2.3 2.3',
+    silent: 'M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4',
+    loc: 'M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11zM12 10m-2 0a2 2 0 1 0 4 0 2 2 0 1 0-4 0',
+    hot: 'M12 12m-2 0a2 2 0 1 0 4 0 2 2 0 1 0-4 0M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9',
+    bat: 'M3 8h15v8H3zM18 11h3v2h-3z',
+    nfc: 'M7 8c3 2 3 6 0 8M11 5c5 3 5 11 0 14M15 3c7 4 7 14 0 18',
+    lock: 'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',
+    shot: 'M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9h8v6H8z',
+    power: 'M12 3v8M6.5 6.5a8 8 0 1 0 11 0',
+    rec: 'M5 7h10v10H5zM9 4h10v10',
+    cam: 'M4 8h3l2-3h6l2 3h3v11H4zM12 13m-3.5 0a3.5 3.5 0 1 0 7 0 3.5 3.5 0 1 0-7 0',
+    calc: 'M5 3h14v18H5zM8 7h8M8 12h2M12 12h2M8 16h2M12 16h2',
+    clk: 'M12 12m-9 0a9 9 0 1 0 18 0 9 9 0 1 0-18 0M12 7v5l3 2',
+    set: 'M12 12m-3 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2'
+  };
+  var TILES = [
+    ['wifi', 'Wi‑Fi', 'wifi'], ['bt', 'Bluetooth', 'bt'], ['data', 'Mobile data', 'data'], ['air', 'Airplane', 'air'],
+    ['torch', 'Torch', 'torch'], ['dnd', 'Focus', 'dnd'], ['rotate', 'Rotation', 'rotate'], ['silent', 'Silent', 'silent'],
+    ['location', 'Location', 'loc'], ['hotspot', 'Hotspot', 'hot'], ['saver', 'Battery saver', 'bat'], ['nfc', 'NFC', 'nfc'],
+    ['lock', 'Lock', 'lock'], ['shot', 'Screenshot', 'shot'], ['power', 'Power menu', 'power'], ['recents', 'Recents', 'rec'],
+    ['camera', 'Camera', 'cam'], ['calc', 'Calculator', 'calc'], ['clock', 'Clock', 'clk'], ['settings', 'Settings', 'set']
+  ];
+  var STATE_KEY = { wifi: 'wifi', bt: 'bt', torch: 'torch', dnd: 'dnd', rotate: 'rotate', silent: 'silent' };
+  var st = {};
+
+
+  /* ---------- Control Center (iOS liquid glass, inside a shadow root) ---------- */
+  var CC_CSS = `
+:host { --u: 84px; --g: 12px; display: block; position: absolute; inset: 0; color: #fff; font: 500 15px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none;
+  --fill: rgba(255,255,255,.12); --fill2: rgba(255,255,255,.17); --edge: rgba(255,255,255,.2); --edge-dark: rgba(255,255,255,.07); --sub: rgba(255,255,255,.62);
+  --blue: #0a84ff; --green: #30d158; --orange: #ff9f0a; --purple: #bf5af2; --red: #ff453a; --yellow: #ffd60a; --spring: cubic-bezier(.34,1.5,.64,1); }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+.wrap { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: calc(12px + env(safe-area-inset-top)) 16px calc(22px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; gap: var(--g); scrollbar-width: none; }
+.wrap::-webkit-scrollbar { display: none; }
+.top { width: calc(var(--u) * 4 + var(--g) * 3); height: 32px; display: flex; justify-content: flex-end; align-items: center; flex: none; }
+.grid { display: grid; grid-template-columns: repeat(4, var(--u)); grid-auto-rows: var(--u); gap: var(--g); flex: none; }
+.row4 { display: grid; grid-template-columns: repeat(4, var(--u)); grid-auto-rows: calc(var(--u) * .74); gap: var(--g); flex: none; }
+
+/* glass: ONE blur sits behind the whole sheet (cheap); modules are translucent fills with soft edge light, so nothing nests blurs */
+.glass { position: relative; border-radius: calc(var(--u) * .36); background: var(--fill); border: 1px solid var(--edge); border-bottom-color: var(--edge-dark); border-right-color: var(--edge-dark);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 6px 18px rgba(0,0,0,.16); overflow: hidden; contain: layout paint; }
+.glass::before { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(120% 60% at 15% -10%, rgba(255,255,255,.2), rgba(255,255,255,0) 60%); }
+.batt { height: 30px; padding: 0 12px 0 10px; border-radius: 15px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.batt .shell { width: 24px; height: 12px; border: 1.5px solid var(--sub); border-radius: 4px; position: relative; }
+.batt .shell::after { content: ''; position: absolute; right: -4px; top: 3px; width: 2px; height: 4px; border-radius: 0 1px 1px 0; background: var(--sub); }
+.batt .lvl { position: absolute; left: 1px; top: 1px; bottom: 1px; width: calc(100% - 2px); border-radius: 2px; background: var(--green); transform-origin: left; transform: scaleX(.5); }
+
+.conn { grid-column: 1 / 3; grid-row: 1 / 3; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; padding: calc(var(--u) * .1); gap: calc(var(--u) * .08); border-radius: calc(var(--u) * .42); }
+.media { grid-column: 3 / 5; grid-row: 1 / 3; padding: calc(var(--u) * .16); display: flex; flex-direction: column; justify-content: space-between; border-radius: calc(var(--u) * .42); }
+.media .t { font-weight: 600; font-size: calc(var(--u) * .18); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.media .s { font-size: 12px; color: var(--sub); margin-top: 2px; }
+.media .ctl { display: flex; justify-content: space-between; align-items: center; padding: 0 2px; }
+.rot { grid-column: 1; grid-row: 3; } .sil { grid-column: 2; grid-row: 3; }
+.dnd { grid-column: 1 / 3; grid-row: 4; justify-content: flex-start !important; padding: 0 calc(var(--u) * .2); gap: 12px; }
+.dnd b { font-weight: 600; font-size: calc(var(--u) * .175); display: block; white-space: nowrap; } .dnd span { font-size: calc(var(--u) * .14); color: var(--sub); }
+.slB { grid-column: 3; grid-row: 3 / 5; } .slV { grid-column: 4; grid-row: 3 / 5; }
+
+/* press + glow (transform / opacity only) */
+.btn { position: relative; cursor: pointer; transition: transform .5s var(--spring); transform: translateZ(0); }
+.btn.p { transform: scale(.93); transition: transform .14s ease-out; }
+.tile { display: flex; align-items: center; justify-content: center; }
+.btn svg { width: calc(var(--u) * .34); height: calc(var(--u) * .34); fill: currentColor; position: relative; z-index: 1; flex: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }
+.glow { position: absolute; inset: 0; background: var(--c, var(--blue)); opacity: 0; transition: opacity .3s ease; pointer-events: none; border-radius: inherit; }
+.halo { position: absolute; inset: -8px; background: var(--c, var(--blue)); filter: blur(14px); opacity: 0; transition: opacity .35s ease; pointer-events: none; z-index: -1; }
+.btn.on .glow { opacity: .95; }
+.btn.on .halo { opacity: .4; }
+.btn.pop { animation: pop .55s var(--spring); }
+@keyframes pop { 0% { transform: scale(1); } 28% { transform: scale(1.12,.9); } 60% { transform: scale(.97,1.04); } 100% { transform: scale(1); } }
+.round { border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.18); overflow: hidden; }
+
+.ctlb { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform .5s var(--spring); color: #fff; }
+.ctlb svg { width: 26px; height: 26px; fill: currentColor; }
+.ctlb.p { transform: scale(.85); transition: transform .12s ease-out; }
+.ctlb.big svg { width: 32px; height: 32px; }
+
+.sl { touch-action: none; cursor: pointer; }
+.sl .fill { position: absolute; inset: 0; background: rgba(255,255,255,.34); transform-origin: bottom; transform: scaleY(.5); will-change: transform; }
+.sl .ic { position: absolute; left: 0; right: 0; bottom: calc(var(--u) * .2); display: flex; justify-content: center; z-index: 2; pointer-events: none; color: #fff; }
+.sl .ic svg { width: calc(var(--u) * .32); height: calc(var(--u) * .32); fill: currentColor; filter: drop-shadow(0 1px 2px rgba(0,0,0,.3)); }
+.sl.drag { transform: scale(1.04); transition: transform .2s var(--spring); }
+.sl:not(.drag) { transition: transform .5s var(--spring); }
+
+.stk svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; width: calc(var(--u) * .3); height: calc(var(--u) * .3); }
+.banner { flex: none; width: calc(var(--u) * 4 + var(--g) * 3); border-radius: 22px; padding: 12px 14px; font-size: 12px; line-height: 1.35; background: rgba(255,160,50,.22); border: 1px solid rgba(255,190,100,.45); display: none; }
+.banner b { display: block; font-size: 13px; margin-bottom: 4px; }
+.banner button { margin-top: 8px; border: 0; border-radius: 14px; padding: 8px 14px; background: rgba(255,255,255,.22); color: inherit; font: inherit; font-weight: 600; }
+.hint { flex: none; text-align: center; font-size: 12px; color: var(--sub); padding: 2px 0 4px; }
+
+/* opening animation: modules rise and settle with a spring, sliders fill up, staggered */
+.go .glass, .go .round { animation: rise .62s var(--spring) backwards; animation-delay: calc(var(--i, 0) * 28ms); }
+.go .sl .fill { animation: grow .8s var(--spring) backwards; animation-delay: calc(var(--i, 0) * 28ms + 60ms); }
+@keyframes rise { from { opacity: 0; transform: translate3d(0,-26px,0) scale(.86); } }
+@keyframes grow { from { transform: scaleY(.02); } }
+@media (prefers-reduced-motion: reduce) { .go .glass, .go .round, .go .sl .fill { animation: none; } }
+`;
+  var CC_HTML = `<div class="top"><div class="batt glass" id="batt"><span id="bpct">--%</span><div class="shell"><div class="lvl" id="blvl"></div></div></div></div><div class="grid"><div class="glass conn" id="conn"></div><div class="glass media"><div><div class="t" id="mTitle">Not Playing</div><div class="s">Media</div></div><div class="ctl"><div class="ctlb" data-m="prev"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM9.5 12L18 6v12z"/></svg></div><div class="ctlb big" data-m="play"><svg viewBox="0 0 24 24" id="mIcon"><path d="M8 5v14l11-7z"/></svg></div><div class="ctlb" data-m="next"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18V6l8.5 6z"/></svg></div></div></div><div class="glass tile btn rot" data-t="rotate" style="--c:var(--red)"><i class="halo"></i><i class="glow"></i><svg viewBox="0 0 24 24"><path d="M16.5 3.5A9 9 0 003 12h2a7 7 0 0111.7-5.2L14 9.5h7v-7l-2.500 2.500zM7.500 20.500A9 9 0 0021 12h-2a7 7 0 01-11.700 5.200L10 14.500H3v7l2.500-2.500z"/></svg></div><div class="glass tile btn sil" data-t="silent" style="--c:var(--orange)"><i class="halo"></i><i class="glow"></i><svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 002.5-2.5h-5A2.5 2.5 0 0012 22zm7-6v-5c0-3.1-1.600-5.600-4.500-6.300V4a2.500 2.500 0 00-5 0v.7C6.600 5.400 5 7.900 5 11v5l-2 2v1h18v-1l-2-2zM4 3.300L2.700 4.600 19.400 21.300l1.300-1.300z"/></svg></div><div class="glass tile btn dnd" data-t="dnd" style="--c:var(--purple)"><i class="halo"></i><i class="glow"></i><svg viewBox="0 0 24 24"><path d="M12.700 2.200A10 10 0 1021.800 14 8 8 0 0112.700 2.200z"/></svg><div style="position:relative;z-index:1"><b>Do Not Disturb</b><span id="dndS">Off</span></div></div><div class="glass sl slB" id="slB" data-k="brightness"><div class="fill"></div><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 100 10 5 5 0 000-10zM11 1h2v3h-2zM11 20h2v3h-2zM1 11h3v2H1zM20 11h3v2h-3zM4.200 5.600l1.400-1.400 2.100 2.100-1.400 1.400zM16.300 17.700l1.400-1.400 2.100 2.100-1.400 1.400zM17.700 6.300l2.100-2.100 1.400 1.400-2.100 2.100zM4.200 18.400l2.100-2.100 1.400 1.400-2.100 2.100z"/></svg></div></div><div class="glass sl slV" id="slV" data-k="volume"><div class="fill"></div><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.500 3A4.500 4.500 0 0014 8v8a4.500 4.500 0 002.500-4zM14 3.200v2.100a7 7 0 010 13.400v2.100a9 9 0 000-17.600z"/></svg></div></div></div><div class="row4"><div class="glass tile btn " data-t="torch" style="--c:var(--yellow)"><i class="halo"></i><i class="glow"></i><svg viewBox="0 0 24 24"><path d="M7 2h10v5l-2 3v12H9V10L7 7V2zm4 9v3h2v-3z"/></svg></div><div class="glass tile btn " data-s="clock"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 5v5.400l4.200 2.500-.8 1.300L11 13V7h2z"/></svg></div><div class="glass tile btn " data-s="calc"><svg viewBox="0 0 24 24"><path d="M5 2h14a2 2 0 012 2v16a2 2 0 01-2 2H5a2 2 0 01-2-2V4a2 2 0 012-2zm1 3v4h12V5H6zm1 6.500v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zM7 15.500v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2z"/></svg></div><div class="glass tile btn " data-s="camera"><svg viewBox="0 0 24 24"><path d="M9 3L7.200 5H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V7a2 2 0 00-2-2h-3.200L15 3H9zm3 15a5 5 0 110-10 5 5 0 010 10zm0-2a3 3 0 100-6 3 3 0 000 6z"/></svg></div></div><div class="row4"><div class="glass tile btn stk" data-s="lock"><svg viewBox="0 0 24 24"><path d="M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3"/></svg></div><div class="glass tile btn stk" data-s="shot"><svg viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/></svg></div><div class="glass tile btn stk" data-s="power"><svg viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.8a8 8 0 1 0 11.4 0"/></svg></div><div class="glass tile btn stk" data-s="recents"><svg viewBox="0 0 24 24"><path d="M3 7h18v10H3zM7 3h10M7 21h10"/></svg></div></div><div class="row4"><div class="glass tile btn stk" data-n="assistant"><svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.8L20 11l-5.800 2.200L12 19l-2.200-5.800L4 11l5.800-2.200z"/></svg></div><div class="glass tile btn stk" data-n="notifications"><svg viewBox="0 0 24 24"><path d="M18 16v-5a6 6 0 0 0-12 0v5l-2 2h16zM10 21h4"/></svg></div><div class="glass tile btn stk" data-n="quick"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M8 14v6"/></svg></div><div class="glass tile btn stk" data-s="settings"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12l2-1-1-3-2 .5-1-1 .5-2-3-1-1 2h-1.500l-1-2-3 1 .5 2-1 1-2-.5-1 3 2 1v1.500l-2 1 1 3 2-.5 1 1-.5 2 3 1 1-2h1.500l1 2 3-1-.5-2 1-1 2 .5 1-3-2-1z"/></svg></div></div><div class="banner" id="banner"><b>Turn on Full Control</b>Needed for Lock, Screenshot and Power menu. It only performs actions; it never reads your screen.<br><button id="a11y">Open Accessibility settings</button></div><div class="hint">Swipe up or tap empty space to close</div>`;
+  var ccHost = $('ccHost'), ccShadow = ccHost.attachShadow({ mode: 'open' }), ccBuilt = false, ccNoClose = false, ccPlaying = false, ccLast = {};
+  function ccQ(s) { return ccShadow.querySelector(s); }
+  function ccQA(s) { return Array.prototype.slice.call(ccShadow.querySelectorAll(s)); }
+  function ccHaptic(ms) { try { navigator.vibrate && navigator.vibrate(ms || 8); } catch (e) {} }
+  function ccPop(el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+  var CC_CONN = [
+    ['air', '#ff9f0a', 'M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z'],
+    ['data', '#30d158', 'M2 20h3v-4H2zm5 0h3V12H7zm5 0h3V8h-3zm5 0h3V3h-3z'],
+    ['wifi', '#0a84ff', 'M12 18.5a1.8 1.8 0 100 3.6 1.8 1.8 0 000-3.6zM12 4C7.9 4 4.2 5.6 1.5 8.3l1.9 1.9C5.6 8 8.6 6.7 12 6.7s6.4 1.3 8.6 3.5l1.9-1.9C19.8 5.6 16.1 4 12 4zm0 5.7c-2.6 0-5 1-6.7 2.8l1.9 1.9c1.2-1.3 3-2 4.8-2s3.6.7 4.8 2l1.9-1.9C17 10.7 14.6 9.7 12 9.7z'],
+    ['bt', '#0a84ff', 'M13 2v7.6L8.4 5 7 6.4 11.6 11 7 15.6 8.4 17l4.6-4.6V22l6-6-4.2-5L19 6l-6-4zm2 4.8l1.2 1.2L15 9.2V6.8zm0 8l1.2 1.2L15 17.2v-2.4z']
+  ];
+  function buildCC() {
+    if (ccBuilt) return; ccBuilt = true;
+    ccShadow.innerHTML = '<style>' + CC_CSS + '</style><div class="wrap" id="wrap">' + CC_HTML + '</div>';
+    ccLayout();
+    var conn = ccQ('#conn');
+    CC_CONN.forEach(function (c) {
+      var d = document.createElement('div'); d.className = 'round btn'; d.setAttribute('data-c', c[0]); d.style.setProperty('--c', c[1]);
+      d.innerHTML = '<i class="halo"></i><i class="glow"></i><svg viewBox="0 0 24 24"><path d="' + c[2] + '"/></svg>';
+      conn.appendChild(d);
+    });
+    ccQA('.btn, .ctlb').forEach(function (el) {
+      el.addEventListener('pointerdown', function () { el.classList.add('p'); });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) { el.addEventListener(ev, function () { el.classList.remove('p'); }); });
+    });
+    ccQA('.sl').forEach(function (sl) {
+      var k = sl.getAttribute('data-k'), id = null, last = 0;
+      function set(e, final) {
+        var r = sl.getBoundingClientRect();
+        var v = Math.round(Math.max(0, Math.min(100, (r.bottom - e.clientY) / r.height * 100)));
+        if (k === 'brightness') v = Math.max(1, v);
+        sl.querySelector('.fill').style.transform = 'scaleY(' + Math.max(.02, v / 100) + ')';
+        var now = Date.now();
+        if (A && (final || now - last > 80)) { last = now; try { if (k === 'brightness') A.setBrightness(v); else A.setVolume(v); } catch (x) {} }
+      }
+      sl.addEventListener('pointerdown', function (e) { e.stopPropagation(); ccNoClose = true; id = e.pointerId; sl.setPointerCapture(id); sl.classList.add('drag'); ccHaptic(6); set(e); });
+      sl.addEventListener('pointermove', function (e) { if (id === e.pointerId) set(e); });
+      function end(e) { if (id !== e.pointerId) return; set(e, true); id = null; sl.classList.remove('drag'); setTimeout(function () { ccNoClose = false; }, 120); }
+      sl.addEventListener('pointerup', end); sl.addEventListener('pointercancel', end);
+    });
+    ccShadow.addEventListener('click', function (e) {
+      var t = e.target.closest ? e.target.closest('[data-t],[data-c],[data-m],[data-s],[data-n],#a11y') : null;
+      if (!t) { if (e.target.id === 'wrap') hide(cc); return; }
+      ccHaptic(10);
+      if (t.id === 'a11y') { if (A) A.openAccessibilitySettings(); return; }
+      if (t.hasAttribute('data-t')) { ccPop(t); ccTap(t.getAttribute('data-t')); }
+      else if (t.hasAttribute('data-c')) { ccPop(t); if (!A) { msg('Works inside the launcher app'); return; } hide(cc); A.shortcut(t.getAttribute('data-c')); }
+      else if (t.hasAttribute('data-m')) {
+        var m = t.getAttribute('data-m'); if (A) A.media(m);
+        if (m === 'play') { ccPlaying = !ccPlaying; ccPaint(); }
+      }
+      else if (t.hasAttribute('data-s')) { ccPop(t); ccTap(t.getAttribute('data-s')); }
+      else if (t.hasAttribute('data-n')) {
+        var k = t.getAttribute('data-n');
+        if (k === 'assistant') { openAI(); return; }
+        if (!A) { msg('Works inside the launcher app'); return; }
+        hide(cc); setTimeout(function () { if (k === 'quick') A.openQuickSettings(); else A.openNotifications(); }, 200);
+      }
+    });
+  }
+  // sizes everything from the screen so it fits any phone (min of width and height), and scrolls only if it truly can't fit
+  function ccLayout() {
+    if (!ccBuilt) return;
+    var W = window.innerWidth, Hh = window.innerHeight, g = 12;
+    var byW = (W - 32 - g * 3) / 4, byH = (Hh - 250) / 7.3;
+    var u = Math.max(56, Math.min(byW, byH, 104));
+    ccHost.style.setProperty('--u', u + 'px');
+    ccShadow.host.style.setProperty('--u', u + 'px');
+  }
+  window.addEventListener('resize', ccLayout);
+  function ccGo() {
+    var w = ccQ('#wrap'); if (!w) return;
+    ccQA('.glass, .round').forEach(function (e, i) { e.style.setProperty('--i', i); });
+    ccQ('#slB').style.setProperty('--i', 6); ccQ('#slV').style.setProperty('--i', 7);
+    w.classList.remove('go'); void w.offsetWidth; w.classList.add('go'); w.scrollTop = 0;
+  }
+  function ccPaint() {
+    if (!ccBuilt) return;
+    var s = ccLast;
+    var on = { wifi: !!s.wifi, bt: !!s.bt, torch: !!s.torch, dnd: !!s.dnd, silent: !!s.silent, rotate: s.rotate === false };
+    ccQA('[data-c]').forEach(function (e) { e.classList.toggle('on', !!on[e.getAttribute('data-c')]); });
+    ccQA('[data-t]').forEach(function (e) { e.classList.toggle('on', !!on[e.getAttribute('data-t')]); });
+    var b = s.brightness != null ? s.brightness : 50, v = s.volume != null ? s.volume : 50, pc = s.battery != null ? s.battery : -1;
+    ccQ('#slB .fill').style.transform = 'scaleY(' + Math.max(.02, b / 100) + ')';
+    ccQ('#slV .fill').style.transform = 'scaleY(' + Math.max(.02, v / 100) + ')';
+    ccQ('#bpct').textContent = pc >= 0 ? pc + '%' : '';
+    ccQ('#blvl').style.transform = 'scaleX(' + Math.max(.04, Math.max(0, pc) / 100) + ')';
+    ccQ('#blvl').style.background = pc >= 0 && pc <= 20 ? 'var(--red)' : 'var(--green)';
+    ccQ('#mIcon').innerHTML = ccPlaying ? '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>' : '<path d="M8 5v14l11-7z"/>';
+    ccQ('#banner').style.display = (A && !s.a11y) ? 'block' : 'none';
+    ccQ('#dndS').textContent = on.dnd ? 'On' : 'Off';
+  }
+  function readStates() { if (!A) return {}; try { return JSON.parse(A.getStates()); } catch (e) { return {}; } }
+  function refresh() {
+    st = readStates();
+    ccLast = st;
+    if (A) { try { var b = A.getBattery(); if (b >= 0) ccLast.battery = b; } catch (e) {} }
+    ccPaint();
+  }
+  function openCC() { closeAll(); buildCC(); ccLayout(); show(cc); refresh(); ccGo(); ccHaptic(12); }
+
+  function ccTap(id) {
+    if (!A) { msg('Works inside the launcher app'); return; }
+    if (id === 'torch' || id === 'dnd' || id === 'rotate' || id === 'silent') { A.toggle(id); setTimeout(refresh, 450); return; }
+    if (id === 'recents') { hide(cc); openRecents(); return; }
+    if (id === 'lock') { doLock(); return; }
+    if (id === 'settings') { hide(cc); setTimeout(openSt, 220); return; }
+    if (id === 'shot' || id === 'power') {
+      if (!st.a11y) { msg('Turn on Full Control first (orange banner below)'); return; }
+      hide(cc);
+      setTimeout(function () { A.globalAction(id); }, id === 'shot' ? 700 : 250);
+      return;
+    }
+    hide(cc); A.shortcut(id);
+  }
+
+  /* ---------- Lock screen ---------- */
+  var locked = false, torchLS = false, B = document.body;
+  function showLock() {
+    if (locked) return;
+    locked = true; tick(); closeAll();
+    B.style.setProperty('--p', 0); B.classList.remove('unlocking', 'dragging'); B.classList.add('locked');
+    ls.classList.remove('leaving'); ls.style.transition = 'none'; ls.style.transform = ''; ls.style.filter = ''; ls.style.opacity = '';
+    ls.classList.add('show'); void ls.offsetWidth; ls.style.transition = '';
+  }
+  function unlock() {
+    B.classList.remove('dragging', 'locked'); B.classList.add('unlocking');
+    ls.style.transition = ''; ls.style.transform = ''; ls.style.filter = ''; ls.style.opacity = '';
+    ls.classList.add('leaving');                       // lock screen blurs, zooms and fades away
+    setTimeout(function () { B.style.setProperty('--p', 0); }, 30);
+    setTimeout(function () { ls.classList.remove('show', 'leaving'); B.classList.remove('unlocking'); locked = false; }, 680);
+  }
+  function doLock() {
+    hide(cc);
+    showLock();
+    if (A) { var s = readStates(); if (s.a11y) setTimeout(function () { A.globalAction('lock'); }, 450); }
+  }
+  var ly = 0, lt = 0, lsDrag = false;
+  ls.addEventListener('touchstart', function (e) { ly = e.touches[0].clientY; lt = Date.now(); lsDrag = true; ls.style.transition = 'none'; B.classList.add('dragging'); }, { passive: true });
+  ls.addEventListener('touchmove', function (e) {
+    if (!lsDrag) return;
+    var dy = Math.min(0, e.touches[0].clientY - ly);
+    var p = Math.min(1, -dy / (window.innerHeight * 0.5));
+    ls.style.transform = 'translate3d(0,' + (dy * 0.5) + 'px,0) scale(' + (1 + p * 0.04) + ')';
+    ls.style.filter = 'blur(' + (p * 26) + 'px)';
+    ls.style.opacity = String(1 - p * 0.85);
+    B.style.setProperty('--p', p);                     // home screen un-blurs in step with your finger
+  }, { passive: true });
+  function lsRelease(unlockOk) {
+    lsDrag = false; ls.style.transition = ''; B.classList.remove('dragging');
+    if (unlockOk) { unlock(); return; }
+    ls.style.transform = 'translate3d(0,0,0)'; ls.style.filter = 'blur(0px)'; ls.style.opacity = '1';
+    B.style.setProperty('--p', 0);
+    setTimeout(function () { if (locked) { ls.style.transform = ''; ls.style.filter = ''; ls.style.opacity = ''; } }, 650);
+  }
+  ls.addEventListener('touchend', function (e) {
+    if (!lsDrag) return;
+    var dy = e.changedTouches[0].clientY - ly, v = -dy / Math.max(1, Date.now() - lt);
+    lsRelease(dy < -140 || (dy < -50 && v > 0.6));
+  });
+  ls.addEventListener('touchcancel', function () { if (lsDrag) lsRelease(false); });
+  $('lsTorch').addEventListener('click', function () {
+    if (!A) return; A.toggle('torch'); torchLS = !torchLS; this.classList.toggle('on', torchLS);
+  });
+  $('lsTorch').addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+  $('lsCam').addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+  $('lsCam').addEventListener('click', function () { if (A) { A.shortcut('camera'); unlock(); } });
+  window.onWake = function () { if (cfg.lockscreen) showLock(); };
+
+  /* ---------- Recent apps ---------- */
+  function openRecents() {
+    closeAll();
+    var body = $('rcBody'); body.innerHTML = '';
+    var s = readStates();
+    var list = [];
+    if (A && s.usage) { try { list = JSON.parse(A.getRecents()); } catch (e) {} }
+
+    if (A && !s.usage) {
+      var e = document.createElement('div'); e.className = 'empty';
+      e.innerHTML = 'To show your recent apps, Android needs you to allow <b>Usage access</b> for this launcher.<br><br>';
+      var b1 = document.createElement('button'); b1.className = 'pill'; b1.textContent = 'Allow usage access'; b1.onclick = function () { A.requestUsageAccess(); };
+      e.appendChild(b1); body.appendChild(e);
+    } else if (!list.length) {
+      var e2 = document.createElement('div'); e2.className = 'empty'; e2.textContent = 'No recent apps yet. Open some apps and they will show up here.';
+      body.appendChild(e2);
+    } else {
+      var box = document.createElement('div'); box.id = 'rcBox';
+      list.forEach(function (app) { box.appendChild(recentCard(app, box)); });
+      body.appendChild(box);
+      var tip = document.createElement('div'); tip.className = 'small'; tip.style.textAlign = 'center';
+      tip.textContent = 'Tap to open. Swipe a card up to remove it from this list.';
+      body.appendChild(tip);
+    }
+    var foot = document.createElement('div'); foot.className = 'rfoot';
+    if (A && s.a11y) { var sb = document.createElement('button'); sb.className = 'pill'; sb.textContent = 'Open system recents'; sb.onclick = function () { closeAll(); setTimeout(function () { A.globalAction('recents'); }, 250); }; foot.appendChild(sb); }
+    if (list.length) { var cl = document.createElement('button'); cl.className = 'pill'; cl.textContent = 'Clear all'; cl.onclick = function () { body.innerHTML = '<div class="empty">Cleared.</div>'; }; foot.appendChild(cl); }
+    body.appendChild(foot);
+    show(rc);
+  }
+
+  function recentCard(app, box) {
+    var c = document.createElement('div'); c.className = 'rcard';
+    var n = document.createElement('div'); n.className = 'rn';
+    var small = document.createElement('div'); small.className = 'ico'; iconInto(small, app);
+    var nm = document.createElement('span'); nm.textContent = app.name;
+    n.appendChild(small); n.appendChild(nm);
+    var big = document.createElement('div'); big.className = 'ico big'; iconInto(big, app);
+    var tip = document.createElement('div'); tip.className = 'tip'; tip.textContent = 'Tap to open';
+    c.appendChild(n); c.appendChild(big); c.appendChild(tip);
+
+    var y0 = 0, x0 = 0, dy = 0, drag = false, moved = false;
+    c.addEventListener('touchstart', function (e) { y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; drag = true; moved = false; c.style.transition = 'none'; }, { passive: true });
+    c.addEventListener('touchmove', function (e) {
+      if (!drag) return;
+      dy = e.touches[0].clientY - y0;
+      if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(e.touches[0].clientX - x0)) { moved = true; c.style.transform = 'translate3d(0,' + Math.min(0, dy) + 'px,0)'; c.style.opacity = String(Math.max(.2, 1 + Math.min(0, dy) / 400)); }
+    }, { passive: true });
+    c.addEventListener('touchend', function () {
+      drag = false; c.style.transition = '';
+      if (moved && dy < -110) { c.style.transform = 'translate3d(0,-120%,0)'; c.style.opacity = '0'; setTimeout(function () { if (c.parentNode) c.parentNode.removeChild(c); }, 320); }
+      else { c.style.transform = ''; c.style.opacity = ''; }
+    });
+    c.addEventListener('click', function () { if (!moved && A) { closeAll(); A.openApp(app.pkg); } });
+    return c;
+  }
+
+  /* ---------- Assistant ---------- */
+  var HELP = 'Try things like:\n• open WhatsApp\n• turn on the torch / turn off focus\n• brightness 40 / volume 70 / mute\n• play / next song\n• lock the screen / take a screenshot / power menu\n• call 0241234567 / text 0241234567 saying hello\n• set an alarm for 6:30 am / timer 10 minutes\n• search for pizza near me / directions to the airport\n• wallpaper dusk / icon size 60 / 5 columns\n• show recents / open control center\n\u2022 what time is it / battery level\n\u2022 open the camera and turn on the torch (I can chain commands)\n\nI work fully offline. Nothing you say leaves your phone.';
+  var introShown = false;
+
+  function bubble(text, who) {
+    var b = document.createElement('div'); b.className = 'b ' + who; b.textContent = text;
+    var log = $('aiLog'); log.appendChild(b); log.scrollTop = log.scrollHeight; return b;
+  }
+  function openAI() {
+    closeAll(); llmRefresh();
+    if (!introShown) { introShown = true; bubble('Hi! I run fully offline on your phone. Tell me what to do, or say "help" for examples.', 'bot'); }
+    show(ai);
+  }
+  $('aiMic').onclick = function () { if (A) A.listen(); else msg('Voice works inside the launcher app'); };
+  window.onSpeech = function (t) { $('aiIn').value = t; sendAI(); };
+  $('aiSend').onclick = sendAI;
+  $('aiIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendAI(); });
+
+
+  /* ---------- Optional on-device AI model (AI APK only) ---------- */
+  var llm = { built: false, installed: false, name: '', mb: 0 };
+  var llmOn = true; try { llmOn = localStorage.getItem('ios27llmOn') !== '0'; } catch (e) {}
+  function llmRefresh() {
+    if (A) { try { llm = JSON.parse(A.llmStatus()); } catch (e) {} }
+    var s = $('llmState'), t = $('llmHelp');
+    if (!llm.built) {
+      s.textContent = 'Not in this APK';
+      t.textContent = 'This build has no AI engine. Install IOS27Launcher-AI.apk from the GitHub Releases page to use an on-device model.';
+    } else if (!llm.installed) {
+      s.textContent = 'No model yet';
+      t.textContent = 'Download a small .litertlm model (for example Gemma 3 1B) from huggingface.co/litert-community, then tap Import model file. It needs 1–2 GB of free space and runs fully offline.';
+    } else {
+      s.textContent = (llm.name || 'model') + ' · ' + llm.mb + ' MB';
+      t.textContent = 'Runs on your phone with no internet. The first answer is slower while the model loads.';
+    }
+    sw($('llmOn'), llmOn, function (v) { llmOn = v; try { localStorage.setItem('ios27llmOn', v ? '1' : '0'); } catch (e) {} });
+  }
+  $('aiGear').onclick = function () { $('aiSet').classList.toggle('open'); llmRefresh(); };
+  $('llmPick').onclick = function () { if (!A) return; if (!llm.built) { msg('This APK has no AI engine'); return; } A.llmPick(); };
+  $('llmDel').onclick = function () { if (A && llm.installed) A.llmRemove(); };
+  window.onModelProgress = function (p) { $('llmState').textContent = 'Importing… ' + p + '%'; };
+  window.onModelReady = function () { llmRefresh(); msg('Model ready'); };
+  window.onModelError = function (e) { llmRefresh(); msg('Import failed: ' + e); };
+  window.onModelRemoved = function () { llmRefresh(); };
+
+  var pend = {}, reqN = 0;
+  function llmPrompt(text) {
+    return 'You are the assistant inside an Android phone launcher. Reply with ONE JSON object and nothing else: {"say":"short reply","actions":[...]}.\n' +
+      'Each action has a "do" field: open_app{name} toggle{name:torch|dnd|silent|rotate,on:true|false} brightness{percent} volume{percent} media{key:play|next|prev} ' +
+      'system{what:lock|screenshot|power|recents|notifications|quick} shortcut{name:wifi|bt|data|air|display|location|hotspot|saver|nfc|settings|camera|calc|clock} ' +
+      'dial{number} web_search{query} maps{query} alarm{hour,minute} timer{seconds} show{what:control_center|app_library|customize|recents|lock_screen} customize{setting,value}.\n' +
+      'For questions or chat, answer in "say" and use "actions":[].\n\n' +
+      'User: open the camera and turn on the torch\n{"say":"Opening the camera.","actions":[{"do":"open_app","name":"Camera"},{"do":"toggle","name":"torch","on":true}]}\n' +
+      'User: why is the sky blue\n{"say":"Air scatters blue sunlight more than red, so the sky looks blue.","actions":[]}\n' +
+      'User: ' + text + '\n';
+  }
+  function parseJSON(t) { try { var a = t.indexOf('{'), b = t.lastIndexOf('}'); return JSON.parse(t.slice(a, b + 1)); } catch (e) { return null; } }
+  function askLocal(text, fallback) {
+    var wait = bubble('Thinking… (the first answer can take a while)', 'bot');
+    var id = ++reqN;
+    pend[id] = function (out, err) {
+      if (wait.parentNode) wait.parentNode.removeChild(wait);
+      if (err) { bubble('The on-device model had a problem: ' + err, 'bot'); reply(fallback, text); return; }
+      var r = parseJSON(out);
+      if (r && (r.actions || r.say)) { r.actions = Array.isArray(r.actions) ? r.actions : []; reply(r, text); }
+      else reply({ say: String(out).trim() || 'I\'m not sure.', actions: [] }, text);
+    };
+    A.llmAsk(id, llmPrompt(text));
+  }
+  window.onLocal = function (id, out, err) { var f = pend[id]; if (f) { delete pend[id]; f(out, err); } };
+
+  function sendAI() {
+    var inp = $('aiIn'), text = inp.value.trim(); if (!text) return;
+    inp.value = ''; bubble(text, 'me');
+    var r = local(text);
+    if (r.unknown && A && llm.built && llm.installed && llmOn) askLocal(text, r); else reply(r, text);
+  }
+
+  function reply(res, userText) {
+    var out = [];
+    (res.actions || []).slice(0, 8).forEach(function (a) {
+      var f = Object.prototype.hasOwnProperty.call(ACT, a['do']) ? ACT[a['do']] : null;
+      try { out.push(f ? f(a) : 'I can\'t do "' + a['do'] + '".'); } catch (e) { out.push('That didn\'t work: ' + e.message); }
+    });
+    var said = res.say ? String(res.say) : '';
+    var results = out.filter(Boolean).join('\n');
+    bubble((said && results ? said + '\n' + results : (said || results || 'Done.')), 'bot');
+  }
+
+  /* --- action runners (run by the offline assistant) --- */
+  function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim(); }
+  function findApp(name) {
+    var n = norm(name); if (!n) return null;
+    var apps = getApps(), i;
+    for (i = 0; i < apps.length; i++) if (norm(apps[i].name) === n) return apps[i];
+    for (i = 0; i < apps.length; i++) if (norm(apps[i].name).indexOf(n) === 0) return apps[i];
+    for (i = 0; i < apps.length; i++) if (norm(apps[i].name).indexOf(n) >= 0) return apps[i];
+    for (i = 0; i < apps.length; i++) if (n.indexOf(norm(apps[i].name)) >= 0 && norm(apps[i].name).length > 3) return apps[i];
+    var al = ALIAS[n];
+    if (al) for (var k = 0; k < al.length; k++) { var hit = findAppExact(apps, al[k]); if (hit) return hit; }
+    if (n.length >= 4) {                                   // typo tolerance, e.g. "whatsap", "instagam"
+      var best = null, bd = 99, lim = Math.max(1, Math.floor(n.length / 4));
+      for (i = 0; i < apps.length; i++) { var d = lev(n, norm(apps[i].name)); if (d < bd) { bd = d; best = apps[i]; } }
+      if (best && bd <= lim) return best;
+    }
+    return null;
+  }
+  function findAppExact(apps, n) { for (var i = 0; i < apps.length; i++) if (norm(apps[i].name).indexOf(n) >= 0) return apps[i]; return null; }
+  function lev(a, b) {
+    var m = a.length, n = b.length, d = [], i, j;
+    for (i = 0; i <= m; i++) { d[i] = [i]; }
+    for (j = 1; j <= n; j++) d[0][j] = j;
+    for (i = 1; i <= m; i++) for (j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[m][n];
+  }
+  var ALIAS = { insta: ['instagram'], ig: ['instagram'], yt: ['youtube'], fb: ['facebook'], 'whats app': ['whatsapp'], wa: ['whatsapp'], gallery: ['photos', 'gallery'], pictures: ['photos', 'gallery'], texts: ['messages', 'messaging'], sms: ['messages', 'messaging'], text: ['messages', 'messaging'], dialer: ['phone', 'dialer'], calls: ['phone', 'dialer'], browser: ['chrome', 'browser', 'internet'], web: ['chrome', 'browser', 'internet'], mail: ['gmail', 'mail', 'email'], email: ['gmail', 'mail', 'email'], music: ['spotify', 'music', 'youtube music'], maps: ['maps'], notes: ['notes', 'keep'], store: ['play store'], 'app store': ['play store'], playstore: ['play store'], files: ['files', 'my files'], tiktok: ['tiktok'], twitter: ['x', 'twitter'], 'file manager': ['files', 'my files'] };
+  function needA() { if (!A) throw new Error('only works inside the launcher app'); }
+  function pct(v) { v = Math.round(Number(v)); if (isNaN(v)) throw new Error('I need a number'); return Math.max(0, Math.min(100, v)); }
+
+  var ACT = {
+    open_app: function (a) { needA(); var app = findApp(a.name); if (!app) return 'I couldn\'t find an app called "' + a.name + '".'; closeAll(); setTimeout(function () { A.openApp(app.pkg); }, 220); return 'Opening ' + app.name + '.'; },
+    toggle: function (a) {
+      needA(); var key = a.name, want = a.on;
+      var cur = !!readStates()[key];
+      if (want === undefined || cur !== !!want) A.toggle(key);
+      return (key === 'dnd' ? 'Focus' : key.charAt(0).toUpperCase() + key.slice(1)) + (want === false ? ' off.' : ' on.') + (key === 'rotate' || key === 'dnd' ? ' (Android may ask for permission the first time.)' : '');
+    },
+    closeall: function () { closeAll(); return ''; },
+    info: function (a) {
+      if (a.what === 'battery') { needA(); return 'Battery is at ' + A.getBattery() + '%.'; }
+      return '';
+    },
+    brightness: function (a) { needA(); var p = Math.max(1, pct(a.percent)); A.setBrightness(p); return 'Brightness ' + p + '%.'; },
+    volume: function (a) { needA(); A.setVolume(pct(a.percent)); return 'Volume ' + pct(a.percent) + '%.'; },
+    volume_delta: function (a) { needA(); var v = pct((readStates().volume || 0) + a.by); A.setVolume(v); return 'Volume ' + v + '%.'; },
+    media: function (a) { needA(); A.media(a.key); return 'Done.'; },
+    system: function (a) {
+      needA(); var w = a.what;
+      if (w === 'recents') { openRecents(); return ''; }
+      if (w === 'lock') { doLock(); return 'Locking.'; }
+      if (w === 'notifications') { closeAll(); setTimeout(function () { A.openNotifications(); }, 250); return ''; }
+      if (w === 'quick') { closeAll(); setTimeout(function () { A.openQuickSettings(); }, 250); return ''; }
+      if (w === 'screenshot' || w === 'power') {
+        if (!readStates().a11y) return 'Turn on Full Control first: open Control Center and use the banner.';
+        closeAll(); setTimeout(function () { A.globalAction(w === 'power' ? 'power' : 'shot'); }, w === 'power' ? 300 : 800); return w === 'power' ? 'Opening the power menu.' : 'Taking a screenshot.';
+      }
+      return 'I can\'t do that.';
+    },
+    shortcut: function (a) { needA(); closeAll(); A.shortcut(a.name); return 'Opening ' + (a.name === 'settings' ? 'phone' : a.name) + ' settings.'; },
+    dial: function (a) { needA(); A.act('dial', String(a.number), ''); return 'Opening the dialer for ' + a.number + '. Press call to confirm.'; },
+    sms: function (a) { needA(); A.act('sms', String(a.number), String(a.text || '')); return 'Message ready to send to ' + a.number + '.'; },
+    open_url: function (a) { needA(); A.act('url', String(a.url), ''); return 'Opening ' + a.url; },
+    web_search: function (a) { needA(); A.act('search', String(a.query), ''); return 'Searching for "' + a.query + '".'; },
+    maps: function (a) { needA(); A.act('maps', String(a.query), ''); return 'Showing "' + a.query + '" on the map.'; },
+    alarm: function (a) { needA(); var h = parseInt(a.hour, 10), m = parseInt(a.minute || 0, 10); A.act('alarm', h + ':' + m, String(a.label || '')); return 'Alarm set for ' + (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m + (h >= 12 ? ' pm' : ' am') + '.'; },
+    timer: function (a) { needA(); A.act('timer', String(Math.round(a.seconds)), String(a.label || '')); return 'Timer started for ' + Math.round(a.seconds) + ' seconds.'; },
+    show: function (a) {
+      var w = a.what;
+      if (w === 'control_center') { closeAll(); setTimeout(openCC, 120); }
+      else if (w === 'app_library') openLib();
+      else if (w === 'customize') openCz();
+      else if (w === 'recents') openRecents();
+      else if (w === 'lock_screen') showLock();
+      else if (w === 'launcher_settings') openSt();
+      else if (w === 'store') openStore();
+      else if (w === 'weather') openWeather();
+      else return 'I can\'t show that.';
+      return '';
+    },
+    customize: function (a) {
+      var s = a.setting, v = a.value;
+      if (s === 'wallpaper') {
+        v = norm(v);
+        if (v !== 'system' && !WALLS[v]) return 'Wallpapers: ' + Object.keys(WALLS).join(', ') + ', system.';
+        cfg.wall = v; save(); applyWall(); return 'Wallpaper: ' + v + '.';
+      }
+      if (s === 'icon_size') { cfg.size = Math.max(40, Math.min(64, parseInt(v, 10) || 54)); changed(); return 'Icon size ' + cfg.size + '.'; }
+      if (s === 'columns') { cfg.cols = parseInt(v, 10) === 5 ? 5 : 4; changed(); return cfg.cols + ' columns.'; }
+      if (s === 'shape') { if (!RADIUS[v]) return 'Shapes: squircle, circle, square.'; cfg.shape = v; changed(); return 'Icons are now ' + v + '.'; }
+      if (s === 'labels') { cfg.labels = (v === true || v === 'on' || v === 'true' || v === 'show'); changed(); return 'App names ' + (cfg.labels ? 'on.' : 'off.'); }
+      if (s === 'clock') { cfg.clock = (v === true || v === 'on' || v === 'true' || v === 'show'); changed(); return 'Clock ' + (cfg.clock ? 'on.' : 'off.'); }
+      return 'I can\'t change that.';
+    }
+  };
+
+  /* --- offline command understanding --- */
+  var TOG = { torch: 'torch', flashlight: 'torch', 'flash light': 'torch', light: 'torch', dnd: 'dnd', 'do not disturb': 'dnd', 'dont disturb': 'dnd', focus: 'dnd', silent: 'silent', 'silent mode': 'silent', mute: 'silent', vibrate: 'silent', rotation: 'rotate', 'auto rotate': 'rotate', autorotate: 'rotate', rotate: 'rotate', 'screen rotation': 'rotate' };
+  var SHORT = { wifi: 'wifi', 'wi-fi': 'wifi', bluetooth: 'bt', 'mobile data': 'data', data: 'data', internet: 'data', 'airplane mode': 'air', airplane: 'air', 'flight mode': 'air', location: 'location', gps: 'location', hotspot: 'hotspot', nfc: 'nfc', 'battery saver': 'saver', 'power saving': 'saver', settings: 'settings', camera: 'camera', calculator: 'calc', clock: 'clock', alarms: 'clock', display: 'display' };
+  var PANELS = { 'control center': 'control_center', 'app library': 'app_library', customize: 'customize', recents: 'recents', 'recent apps': 'recents', 'lock screen': 'lock_screen', 'launcher settings': 'launcher_settings', account: 'launcher_settings', 'my account': 'launcher_settings', store: 'store', 'app store': 'store', 'play store': 'store', weather: 'weather', 'the weather': 'weather' };
+
+  function parseTime(s) {
+    var m = s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/);
+    if (!m) return null;
+    var h = parseInt(m[1], 10), mi = m[2] ? parseInt(m[2], 10) : 0, ap = m[3] ? m[3][0] : '';
+    if (ap === 'p' && h < 12) h += 12; if (ap === 'a' && h === 12) h = 0;
+    if (h > 23 || mi > 59) return null;
+    return { h: h, m: mi };
+  }
+
+  function local1(text) {
+    var s = text.toLowerCase().trim().replace(/[.!?]+$/, '').replace(/^(hey |hi |ok |okay )?(assistant|siri|jarvis)[, ]*/, ''), m;
+    s = s.replace(/^please\s+/, '').replace(/\s+please$/, '');
+    if (!s) return { say: 'Yes?', actions: [] };
+    if (/^(help|what can you do|commands)/.test(s)) return { say: HELP, actions: [] };
+    if (/^(hi|hello|hey|yo|good (morning|afternoon|evening))$/.test(s)) return { say: 'Hello! What should I do?', actions: [] };
+    if (/^(thanks|thank you|cheers)/.test(s)) return { say: 'Anytime.', actions: [] };
+    if (/^(who are you|what are you)/.test(s)) return { say: 'I\'m the assistant built into this launcher. I run fully offline on your phone.', actions: [] };
+    if (/(what('s| is)? the )?time( is it| now)?$/.test(s) && /time/.test(s) && s.split(' ').length <= 5) return { say: 'It\'s ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '.', actions: [] };
+    if (/(what('s| is)? )?(the |today'?s? )?(date|day)( is it| today)?$/.test(s) && s.split(' ').length <= 5) return { say: new Date().toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + '.', actions: [] };
+    if (/battery( level| percentage| left| status)?$|how much battery/.test(s) && !/saver|saving/.test(s)) return { actions: [{ do: 'info', what: 'battery' }] };
+    if (/^(go home|home|close|go back|dismiss|cancel)$/.test(s)) return { say: '', actions: [{ do: 'closeall' }] };
+
+    if ((m = s.match(/^(?:turn|switch)\s+(on|off)\s+(?:the\s+)?(.+)$/)) || (m = s.match(/^(?:turn|switch)\s+(?:the\s+)?(.+?)\s+(on|off)$/)) && (m = [m[0], m[2], m[1]])) {
+      var onoff = m[1] === 'on', nm = m[2].trim();
+      if (TOG[nm]) return { actions: [{ do: 'toggle', name: TOG[nm], on: nm === 'mute' || nm === 'vibrate' ? onoff : onoff }] };
+      if (SHORT[nm]) return { say: 'Android only lets me open that screen:', actions: [{ do: 'shortcut', name: SHORT[nm] }] };
+    }
+    if ((m = s.match(/^(torch|flashlight|flash light)(?:\s+(on|off))?$/))) return { actions: [{ do: 'toggle', name: 'torch', on: m[2] ? m[2] === 'on' : undefined }] };
+    if (/^(mute|silent mode|silence)( the phone)?$/.test(s)) return { actions: [{ do: 'toggle', name: 'silent', on: true }] };
+    if (/^unmute/.test(s)) return { actions: [{ do: 'toggle', name: 'silent', on: false }] };
+    if ((m = s.match(/(?:do not disturb|dnd|focus)(?: mode)?\s*(on|off)?$/)) && /^(enable|disable|set|start|stop|do not|dnd|focus)/.test(s)) return { actions: [{ do: 'toggle', name: 'dnd', on: m[1] ? m[1] === 'on' : !/^(disable|stop)/.test(s) }] };
+
+    if (/(max|full) brightness/.test(s)) return { actions: [{ do: 'brightness', percent: 100 }] };
+    if ((m = s.match(/brightness.*?(\d{1,3})/))) return { actions: [{ do: 'brightness', percent: m[1] }] };
+    if (/^(brighter|brightness up)/.test(s)) return { actions: [{ do: 'brightness', percent: 80 }] };
+    if (/^(dim|dimmer|brightness down)/.test(s)) return { actions: [{ do: 'brightness', percent: 20 }] };
+    if ((m = s.match(/volume.*?(\d{1,3})/))) return { actions: [{ do: 'volume', percent: m[1] }] };
+    if (/(volume up|louder|turn it up)/.test(s)) return { actions: [{ do: 'volume_delta', by: 15 }] };
+    if (/(volume down|quieter|turn it down)/.test(s)) return { actions: [{ do: 'volume_delta', by: -15 }] };
+    if (/^(play|pause|resume|stop)( the)?( music| song| video)?$/.test(s)) return { actions: [{ do: 'media', key: 'play' }] };
+    if (/^(next|skip)( song| track)?$/.test(s)) return { actions: [{ do: 'media', key: 'next' }] };
+    if (/^(previous|last|back)( song| track)$|^previous$/.test(s)) return { actions: [{ do: 'media', key: 'prev' }] };
+
+    if (/^(lock|lock (the )?(screen|phone))$/.test(s)) return { actions: [{ do: 'system', what: 'lock' }] };
+    if (/screenshot|screen shot|screen capture/.test(s)) return { actions: [{ do: 'system', what: 'screenshot' }] };
+    if (/(power menu|shut ?down|power off|restart|reboot)/.test(s)) return { actions: [{ do: 'system', what: 'power' }] };
+    if (/^(show |open )?(my )?(recents|recent apps)$/.test(s)) return { actions: [{ do: 'system', what: 'recents' }] };
+    if (/^(show |open )?(my )?notifications?$/.test(s)) return { actions: [{ do: 'system', what: 'notifications' }] };
+    if (/quick settings/.test(s)) return { actions: [{ do: 'system', what: 'quick' }] };
+
+    if ((m = s.match(/^(?:text|sms|message)\s+(\+?[\d][\d\s\-()]{2,}?)\s*(?:saying|that says|say|:|,)\s*(.+)$/))) return { actions: [{ do: 'sms', number: m[1], text: text.slice(text.toLowerCase().indexOf(m[2])) }] };
+    if ((m = s.match(/^(?:call|dial|phone|ring)\s+(\+?[\d][\d\s\-()]{2,})$/))) return { actions: [{ do: 'dial', number: m[1] }] };
+    if (/^(call|dial|phone|text|message)\s+[a-z]/.test(s) && !/^message(s)?$/.test(s)) return { say: 'I can\'t read contacts, so give me a number, for example "call 0241234567". Or say "open phone".', actions: [] };
+
+    if ((m = s.match(/alarm.*?(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)/))) { var t = parseTime(m[1]); if (t) return { actions: [{ do: 'alarm', hour: t.h, minute: t.m, label: '' }] }; }
+    if ((m = s.match(/timer.*?(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)/))) {
+      var n = parseFloat(m[1]), u = m[2][0], secs = u === 'h' ? n * 3600 : (u === 'm' ? n * 60 : n);
+      return { actions: [{ do: 'timer', seconds: secs, label: '' }] };
+    }
+
+    if ((m = s.match(/^(?:navigate|directions?|take me|drive|route)(?: to)?\s+(.+)$/)) || (m = s.match(/^(?:find|show|where is)\s+(.+?)(?: on (?:the )?maps?| nearby| near me)$/))) return { actions: [{ do: 'maps', query: m[1] }] };
+    if ((m = s.match(/^(?:search|google|look up|search for|find)(?: for)?\s+(.+)$/))) return { actions: [{ do: 'web_search', query: m[1] }] };
+    if ((m = s.match(/^(?:go to|open|visit)\s+(\S+\.[a-z]{2,}\S*)$/))) return { actions: [{ do: 'open_url', url: m[1] }] };
+
+    var WN = Object.keys(WALLS).join('|');
+    if ((m = s.match(new RegExp('(?:wallpaper|background).*?(' + WN + '|system)'))) || (m = s.match(new RegExp('(' + WN + ') (?:wallpaper|background)')))) return { actions: [{ do: 'customize', setting: 'wallpaper', value: m[1] }] };
+    if ((m = s.match(/icon size.*?(\d{2})/))) return { actions: [{ do: 'customize', setting: 'icon_size', value: m[1] }] };
+    if ((m = s.match(/(4|5|four|five) columns?/))) return { actions: [{ do: 'customize', setting: 'columns', value: /5|five/.test(m[1]) ? 5 : 4 }] };
+    if ((m = s.match(/(rounded|squircle|circle|round|square) icons?/))) return { actions: [{ do: 'customize', setting: 'shape', value: m[1] === 'rounded' || m[1] === 'round' ? (m[1] === 'round' ? 'circle' : 'squircle') : m[1] }] };
+    if ((m = s.match(/^(show|hide)(?: the)? (?:app )?(names|labels|clock)$/))) return { actions: [{ do: 'customize', setting: m[2] === 'clock' ? 'clock' : 'labels', value: m[1] === 'show' ? 'on' : 'off' }] };
+
+    if ((m = s.match(/^(?:open|show|go to|launch|start)\s+(?:the\s+)?(.+?)(?:\s+app)?$/))) {
+      var n2 = m[1];
+      if (PANELS[n2]) return { actions: [{ do: 'show', what: PANELS[n2] }] };
+      var app = findApp(n2);
+      if (app) return { actions: [{ do: 'open_app', name: n2 }] };
+      if (SHORT[n2]) return { actions: [{ do: 'shortcut', name: SHORT[n2] }] };
+      return { say: 'I couldn\'t find an app called "' + n2 + '".', actions: [] };
+    }
+    if (SHORT[s]) return { actions: [{ do: 'shortcut', name: SHORT[s] }] };
+    var direct = findApp(s);
+    if (direct && s.split(' ').length <= 3) return { actions: [{ do: 'open_app', name: s }] };
+    return { unknown: true, say: 'I didn\'t get that. Say "help" to see what I understand.', actions: [] };
+  }
+
+
+  // Understands several commands in one sentence: "open camera and turn on the torch"
+  function known(r) { return r && r.actions && r.actions.length > 0; }
+  function local(text) {
+    var parts = text.split(/\s*(?:,|;|\band then\b|\bthen\b|\band\b|\bafter that\b)\s*/i).filter(function (p) { return p.trim(); });
+    if (parts.length > 1) {
+      var all = [], ok = true;
+      for (var i = 0; i < parts.length; i++) { var r = local1(parts[i]); if (!known(r)) { ok = false; break; } all = all.concat(r.actions); }
+      if (ok) return { say: '', actions: all };
+    }
+    return local1(text);
+  }
+
+
+  /* ---------- Settings app: launcher account + sync (your own server, no Google) ---------- */
+  var net = {}, netN = 0;
+  function api(method, path, body, cb) {
+    if (!A) { cb(0, { error: 'Only works inside the launcher app' }); return; }
+    var id = ++netN;
+    net[id] = function (status, text) { var j = {}; try { j = JSON.parse(text); } catch (e) {} cb(status, j); };
+    A.acctRequest(id, method, path, body ? JSON.stringify(body) : '');
+  }
+  window.onNet = function (id, status, text) { var f = net[id]; if (f) { delete net[id]; f(status, text); } };
+  function errText(s, j) { return (j && j.error) ? j.error : (s === 0 ? 'No connection' : 'Error ' + s); }
+  var stMsgEl = null, pendingRecovery = '', forgot = false;
+  function stNote(t) { if (stMsgEl) stMsgEl.textContent = t; }
+  function saveSync() { try { localStorage.setItem('ios27sync', JSON.stringify(syncState)); } catch (e) {} }
+
+  function syncData() {
+    return { wall: cfg.wall === 'custom' ? 'liquid' : cfg.wall, cols: cfg.cols, size: cfg.size, labels: cfg.labels, shape: cfg.shape, clock: cfg.clock, lockscreen: cfg.lockscreen, hidden: cfg.hidden.slice(0, 300), dock: cfg.dock.slice(0, 4) };
+  }
+  function applySync(d) {
+    if (!d || typeof d !== 'object') return false;
+    var n = Object.assign({}, cfg);
+    if (typeof d.wall === 'string' && (WALLS[d.wall] || d.wall === 'system')) n.wall = d.wall;
+    if (d.cols === 4 || d.cols === 5) n.cols = d.cols;
+    if (typeof d.size === 'number' && d.size >= 40 && d.size <= 64) n.size = Math.round(d.size);
+    if (typeof d.labels === 'boolean') n.labels = d.labels;
+    if (typeof d.clock === 'boolean') n.clock = d.clock;
+    if (typeof d.lockscreen === 'boolean') n.lockscreen = d.lockscreen;
+    if (typeof d.shape === 'string' && RADIUS[d.shape]) n.shape = d.shape;
+    function strs(a, max) { return Array.isArray(a) ? a.filter(function (x) { return typeof x === 'string' && x.length < 200; }).slice(0, max) : null; }
+    var hh = strs(d.hidden, 300), dd = strs(d.dock, 4);
+    if (hh) n.hidden = hh;
+    if (dd) n.dock = dd;
+    cfg = n; saveLocal(); applyCfg(); render();
+    return true;
+  }
+  function scheduleSync() {
+    if (!syncState || !syncState.auto || !acct || !acct.signedIn) return;
+    clearTimeout(syncT);
+    syncT = setTimeout(function () { pushSettings(true); }, 3000);
+  }
+  function pushSettings(quiet) {
+    api('PUT', '/api/settings', { settings: syncData() }, function (s, j) {
+      if (s === 200) { syncState.last = j.updatedAt; saveSync(); if (!quiet) stNote('Uploaded ' + new Date().toLocaleTimeString()); }
+      else { if (!quiet) stNote(errText(s, j)); if (s === 401) acctRefresh(); }
+    });
+  }
+  function pullSettings() {
+    api('GET', '/api/settings', null, function (s, j) {
+      if (s === 200 && j.settings) { applySync(j.settings); syncState.last = j.updatedAt; saveSync(); stNote('Downloaded your settings.'); }
+      else if (s === 200) stNote('Nothing saved on your account yet.');
+      else { stNote(errText(s, j)); if (s === 401) acctRefresh(); }
+    });
+  }
+
+
+  /* ---------- Settings app (iOS-style, flat). Lives in a shadow root so its styles can't clash with the launcher ---------- */
+  var ST_CSS = `
+:host {
+  --bg: #F2F2F7; --card: #FFFFFF; --text: #000000; --sub: #6D6D72; --line: #C6C6C8; --tint: #007AFF;
+  --off: #E9E9EA; --knob: #FFFFFF; --green: #34C759; --press: #E5E5EA; --fs: 17px;
+}
+:host([data-dark="1"]) {
+  --bg: #000000; --card: #1C1C1E; --text: #FFFFFF; --sub: #8E8E93; --line: #38383A; --tint: #0A84FF;
+  --off: #39393D; --green: #30D158; --press: #2C2C2E;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+:host { display: block; position: absolute; inset: 0; background: var(--bg); color: var(--text); font: 400 var(--fs)/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; }
+* { -webkit-tap-highlight-color: transparent; }
+#app { position: absolute; inset: 0; overflow: hidden; }
+.act { position: absolute; right: 0; top: env(safe-area-inset-top); height: 44px; padding: 0 16px; display: flex; align-items: center; color: var(--tint); font-weight: 600; cursor: pointer; z-index: 3; }
+.row.tint .l { color: var(--tint); }
+.row.red .l { color: #FF3B30; }
+.who { width: 56px; height: 56px; border-radius: 50%; background: #8E8E93; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 600; flex: none; margin-left: -4px; }
+.row.big { min-height: 76px; }
+.sub { color: var(--sub); font-size: 13px; }
+input.fld { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; text-align: right; user-select: text; -webkit-user-select: text; }
+.rc { font-size: 20px; font-weight: 600; letter-spacing: 1px; user-select: all; -webkit-user-select: all; word-break: break-all; }
+
+/* ---- pages (stack, simple slide, no spring) ---- */
+.page { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column;
+  transform: translateX(100%); transition: transform .3s cubic-bezier(.25,.1,.25,1); will-change: transform; }
+.page.on { transform: translateX(0); }
+.page.under { transform: translateX(-30%); }
+.page.root { transform: none; }
+.page.root.under { transform: translateX(-30%); }
+
+.bar { height: calc(44px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); flex: none; position: relative;
+  display: flex; align-items: center; background: var(--bg); z-index: 2; }
+.bar::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: .5px; background: var(--line); opacity: 0; }
+.bar.line::after { opacity: 1; }
+.bar .t { position: absolute; left: 0; right: 0; text-align: center; font-weight: 600; opacity: 0; pointer-events: none; }
+.bar.line .t { opacity: 1; }
+.back { display: flex; align-items: center; color: var(--tint); padding: 0 8px; height: 44px; cursor: pointer; z-index: 1; }
+.back svg { width: 13px; height: 22px; margin-right: 6px; }
+.scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 16px calc(32px + env(safe-area-inset-bottom)); }
+h1 { font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: .3px; padding: 4px 0 18px; }
+
+/* ---- grouped lists ---- */
+.grp { background: var(--card); border-radius: 10px; margin: 0 0 22px; overflow: hidden; }
+.cap { font-size: 13px; color: var(--sub); text-transform: uppercase; padding: 0 16px 6px; margin-top: -10px; letter-spacing: -.1px; }
+.foot { font-size: 13px; color: var(--sub); padding: 0 16px; margin: -14px 0 22px; line-height: 1.35; }
+.row { min-height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 12px; position: relative; }
+.row + .row::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: var(--line); }
+.row.tap { cursor: pointer; }
+.row.tap:active { background: var(--press); }
+.row .l { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .v { color: var(--sub); white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.chev { width: 8px; height: 14px; flex: none; color: #C4C4C7; }
+.ico { width: 30px; height: 30px; border-radius: 7px; flex: none; display: flex; align-items: center; justify-content: center; margin-left: -4px; }
+.ico svg { width: 18px; height: 18px; fill: #fff; }
+.check { color: var(--tint); font-weight: 600; font-size: 20px; }
+.row.col { flex-direction: column; align-items: stretch; justify-content: center; padding-top: 10px; padding-bottom: 10px; gap: 6px; }
+
+/* ---- controls ---- */
+.sw { width: 51px; height: 31px; border-radius: 16px; background: var(--off); position: relative; flex: none; cursor: pointer; transition: background .2s ease; }
+.sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 50%; background: var(--knob); transition: transform .2s ease; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.sw.on { background: var(--green); }
+.sw.on::after { transform: translateX(20px); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; outline: none; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(var(--tint), var(--tint)) 0/var(--fill, 50%) 100% no-repeat, var(--off); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #fff; margin-top: -12px; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.seg { display: flex; background: var(--off); border-radius: 9px; padding: 2px; }
+.seg div { flex: 1; text-align: center; padding: 6px 0; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; }
+.seg div.on { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+input.txt { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--sub); font: inherit; text-align: right; user-select: text; -webkit-user-select: text; }
+.bat { width: 24px; height: 12px; border: 1.5px solid var(--sub); border-radius: 4px; position: relative; flex: none; }
+.bat i { position: absolute; inset: 1px; background: var(--green); border-radius: 2px; }
+.meter { height: 8px; border-radius: 4px; background: var(--off); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--tint); }
+.preview { font-size: var(--fs); padding: 12px 16px; line-height: 1.35; }
+`;
+  var stHost = $('stHost'), stShadow = stHost.attachShadow({ mode: 'open' }), stApp = null, stack = [];
+  var stPref = (function () { try { return Object.assign({ appearance: 'auto', textSize: 17, bold: false }, JSON.parse(localStorage.getItem('ios27st') || '{}')); } catch (e) { return { appearance: 'auto', textSize: 17, bold: false }; } })();
+  function stPrefSave() { try { localStorage.setItem('ios27st', JSON.stringify(stPref)); } catch (e) {} }
+  var stMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function stTheme() {
+    var dark = stPref.appearance === 'dark' || (stPref.appearance === 'auto' && (!stMq || stMq.matches));
+    stHost.setAttribute('data-dark', dark ? '1' : '0');
+    stHost.style.setProperty('--fs', stPref.textSize + 'px');
+    stHost.style.fontWeight = stPref.bold ? '600' : '400';
+  }
+  if (stMq && stMq.addEventListener) stMq.addEventListener('change', stTheme);
+  function E(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var CHEV = '<svg class="chev" viewBox="0 0 8 14"><path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var BACKI = '<svg viewBox="0 0 13 22"><path d="M11 2L2 11l9 9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function sico(color, path) { return '<div class="ico" style="background:' + color + '"><svg viewBox="0 0 24 24"><path d="' + path + '"/></svg></div>'; }
+  var SP = {
+    wifi: 'M12 18.5a1.8 1.8 0 100 3.6 1.8 1.8 0 000-3.6zM12 4C7.9 4 4.2 5.6 1.5 8.3l1.9 1.9C5.6 8 8.6 6.7 12 6.7s6.4 1.3 8.6 3.5l1.9-1.9C19.8 5.6 16.1 4 12 4zm0 5.7c-2.6 0-5 1-6.7 2.8l1.9 1.9c1.2-1.3 3-2 4.8-2s3.6.7 4.8 2l1.9-1.9C17 10.7 14.6 9.7 12 9.7z',
+    bt: 'M13 2v7.6L8.4 5 7 6.4 11.6 11 7 15.6 8.4 17l4.6-4.6V22l6-6-4.2-5L19 6l-6-4zm2 4.8l1.2 1.2L15 9.2V6.8zm0 8l1.2 1.2L15 17.2v-2.4z',
+    disp: 'M12 7a5 5 0 100 10 5 5 0 000-10zM11 1h2v3h-2zM11 20h2v3h-2zM1 11h3v2H1zM20 11h3v2h-3z',
+    snd: 'M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8v8a4.5 4.5 0 002.5-4zM14 3.2v2.1a7 7 0 010 13.4v2.1a9 9 0 000-17.6z',
+    notif: 'M12 22a2.5 2.5 0 002.5-2.5h-5A2.5 2.5 0 0012 22zm7-6v-5c0-3.1-1.6-5.6-4.5-6.3V4a2.5 2.5 0 00-5 0v.7C6.6 5.4 5 7.9 5 11v5l-2 2v1h18v-1l-2-2z',
+    bat: 'M16 4h-2V2h-4v2H8a2 2 0 00-2 2v14a2 2 0 002 2h8a2 2 0 002-2V6a2 2 0 00-2-2zm-3 14v-4h2l-4 6v-4H9l4-6v4z',
+    stor: 'M4 6a2 2 0 012-2h12a2 2 0 012 2v4H4V6zm0 6h16v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6zm12 2.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z',
+    about: 'M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z',
+    plane: 'M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z',
+    app: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+    ai: 'M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z',
+    lock: 'M18 8h-1V6a5 5 0 00-10 0v2H6a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V10a2 2 0 00-2-2zm-6 9a2 2 0 110-4 2 2 0 010 4zm3.1-9H8.9V6a3.1 3.1 0 016.2 0v2z',
+    key: 'M12.7 10a5 5 0 10-1.4 2H15v2h2v-2h2v-2h-6.3zM7 11a2 2 0 110-4 2 2 0 010 4z',
+    sig: 'M2 20h3v-4H2zm5 0h3V12H7zm5 0h3V8h-3zm5 0h3V3h-3z',
+    hz: 'M3 12h4l2-6 4 12 2-6h6'
+  };
+  function stSt() { return A ? readStates() : {}; }
+
+  function stPush(build) {
+    var page = build();
+    stApp.appendChild(page.el);
+    var below = stack[stack.length - 1];
+    void page.el.offsetWidth;
+    page.el.classList.add('on');
+    if (below) below.el.classList.add('under');
+    stack.push(page);
+    return page;
+  }
+  function stPop() {
+    if (stack.length < 2) return false;
+    var top = stack.pop(), below = stack[stack.length - 1];
+    top.el.classList.remove('on'); below.el.classList.remove('under');
+    setTimeout(function () { if (top.el.parentNode) top.el.parentNode.removeChild(top.el); }, 320);
+    return true;
+  }
+  function stPage(title, big, isRoot) {
+    var page = E('div', 'page' + (isRoot ? ' root' : ''));
+    var bar = E('div', 'bar');
+    if (isRoot) {
+      var d = E('div', 'act', 'Done'); d.onclick = function () { hide(stg); }; page.appendChild(d);
+    } else {
+      var b = E('div', 'back', BACKI + '<span>' + esc(stack.length ? stack[stack.length - 1].title : 'Settings') + '</span>'); b.onclick = stPop; bar.appendChild(b);
+    }
+    bar.appendChild(E('div', 't', esc(title)));
+    var sc = E('div', 'scroll'); sc.appendChild(E('h1', '', esc(big || title)));
+    page.appendChild(bar); page.appendChild(sc);
+    var tk = false;
+    sc.addEventListener('scroll', function () { if (tk) return; tk = true; requestAnimationFrame(function () { tk = false; bar.classList.toggle('line', sc.scrollTop > 40); }); }, { passive: true });
+    return { el: page, body: sc, title: title };
+  }
+  function grp(parent, cap, foot) {
+    if (cap) parent.appendChild(E('div', 'cap', esc(cap)));
+    var g = E('div', 'grp'); parent.appendChild(g);
+    if (foot) parent.appendChild(E('div', 'foot', esc(foot)));
+    return g;
+  }
+  function sSwitch(g, label, get, change, ic) {
+    var r = E('div', 'row', (ic || '') + '<span class="l">' + esc(label) + '</span>');
+    var s = E('div', 'sw' + (get() ? ' on' : ''));
+    s.onclick = function () { var v = !s.classList.contains('on'); s.classList.toggle('on', v); change(v); };
+    r.appendChild(s); g.appendChild(r); return { row: r, sw: s };
+  }
+  function sNav(g, label, value, go, ic) {
+    var r = E('div', 'row tap', (ic || '') + '<span class="l">' + esc(label) + '</span>' + (value != null ? '<span class="v">' + esc(value) + '</span>' : '') + CHEV);
+    r.onclick = go; g.appendChild(r); return r;
+  }
+  function sAct(g, label, go, cls) { var r = E('div', 'row tap ' + (cls || 'tint'), '<span class="l">' + esc(label) + '</span>'); r.onclick = go; g.appendChild(r); return r; }
+  function sField(g, label, type, ph, val) {
+    var r = E('div', 'row', '<span class="l" style="flex:none;min-width:34%">' + esc(label) + '</span>');
+    var i = E('input', 'fld'); i.type = type; i.placeholder = ph || ''; i.value = val || ''; i.autocomplete = 'off'; i.autocapitalize = 'off'; i.spellcheck = false; i.maxLength = 128;
+    r.appendChild(i); g.appendChild(r); return i;
+  }
+  function sSlider(g, label, val, min, max, fmt, onInput) {
+    var r = E('div', 'row col'), head = E('div', ''); head.style.cssText = 'display:flex;justify-content:space-between';
+    var v = E('span', ''); v.style.color = 'var(--sub)';
+    head.appendChild(E('span', '', esc(label))); head.appendChild(v);
+    var inp = document.createElement('input'); inp.type = 'range'; inp.min = min; inp.max = max; inp.value = val;
+    function paint() { inp.style.setProperty('--fill', ((inp.value - min) / (max - min) * 100) + '%'); v.textContent = fmt(+inp.value); }
+    var t = 0;
+    inp.oninput = function () { paint(); var now = Date.now(); if (now - t > 60) { t = now; onInput(+inp.value, false); } };
+    inp.onchange = function () { onInput(+inp.value, true); };
+    paint(); r.appendChild(head); r.appendChild(inp); g.appendChild(r);
+  }
+  function sSeg(g, cur, opts, cb) {
+    var r = E('div', 'row col'), seg = E('div', 'seg');
+    opts.forEach(function (o) {
+      var d = E('div', cur === o[0] ? 'on' : '', esc(o[1]));
+      d.onclick = function () { [].forEach.call(seg.children, function (c) { c.classList.remove('on'); }); d.classList.add('on'); cb(o[0]); };
+      seg.appendChild(d);
+    });
+    r.appendChild(seg); g.appendChild(r);
+  }
+  function sNote(p, text) { if (!p.note) { p.note = E('div', 'foot', ''); p.note.style.margin = '0 0 22px'; p.body.appendChild(p.note); } p.note.textContent = text || ''; }
+  function sys(name) { if (A) A.shortcut(name); else stToast('Only works inside the launcher app'); }
+  function stToast(t) { try { msg(t); } catch (e) {} }
+
+  /* ----- pages ----- */
+  function stRootPage() {
+    var p = stPage('Settings', 'Settings', true), b = p.body;
+    var g0 = grp(b);
+    var who = E('div', 'row tap big');
+    function paintWho() {
+      var signed = acct && acct.signedIn;
+      who.innerHTML = '<div class="who">' + (signed ? esc((acct.id || '?').charAt(0).toUpperCase()) : '+') + '</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:20px;overflow:hidden;text-overflow:ellipsis">' + (signed ? esc(acct.id) : 'Sign in / Create account') + '</div><div class="sub">' + (signed ? 'Launcher account' : 'Sync your layout and wallpaper') + '</div></div>' + CHEV;
+    }
+    paintWho(); who.onclick = function () { stAccount(); }; g0.appendChild(who);
+    p.refresh = paintWho;
+
+    var s = stSt();
+    var g1 = grp(b);
+    sNav(g1, 'Airplane Mode', null, function () { sys('air'); }, sico('#FF9500', SP.plane));
+    sNav(g1, 'Wi-Fi', s.wifi === undefined ? null : (s.wifi ? 'On' : 'Off'), function () { sys('wifi'); }, sico('#007AFF', SP.wifi));
+    sNav(g1, 'Bluetooth', s.bt === undefined ? null : (s.bt ? 'On' : 'Off'), function () { sys('bt'); }, sico('#007AFF', SP.bt));
+    sNav(g1, 'Mobile Data', null, function () { sys('data'); }, sico('#34C759', SP.sig));
+    var g2 = grp(b);
+    sNav(g2, 'Notifications', null, function () { stNotif(); }, sico('#FF3B30', SP.notif));
+    sNav(g2, 'Sounds', null, function () { stSounds(); }, sico('#FF2D55', SP.snd));
+    var g3 = grp(b);
+    sNav(g3, 'Display & Brightness', null, function () { stDisplay(); }, sico('#007AFF', SP.disp));
+    sNav(g3, 'Battery', null, function () { stBattery(); }, sico('#34C759', SP.bat));
+    sNav(g3, 'Storage', null, function () { stStorage(); }, sico('#8E8E93', SP.stor));
+    var g4 = grp(b, 'Launcher');
+    sNav(g4, 'Customize', null, function () { hide(stg); setTimeout(openCz, 200); }, sico('#AF52DE', SP.app));
+    sNav(g4, 'Assistant', null, function () { hide(stg); setTimeout(openAI, 200); }, sico('#5856D6', SP.ai));
+    sSwitch(g4, 'Lock screen', function () { return cfg.lockscreen; }, function (v) { cfg.lockscreen = v; save(); }, sico('#FF9500', SP.lock));
+    var g5 = grp(b);
+    sNav(g5, 'About', null, function () { stAbout(); }, sico('#8E8E93', SP.about));
+    return p;
+  }
+  function stNotif() {
+    stPush(function () {
+      var p = stPage('Notifications'), s = stSt();
+      var g = grp(p.body, null, 'Do Not Disturb needs permission the first time. Android may ask you to allow it for this launcher.');
+      sSwitch(g, 'Do Not Disturb', function () { return !!s.dnd; }, function () { if (A) A.toggle('dnd'); else stToast('Only works inside the launcher app'); });
+      var g2 = grp(p.body);
+      sAct(g2, 'Show notification shade', function () { if (A) A.openNotifications(); });
+      sAct(g2, 'Phone notification settings', function () { sys('settings'); });
+      return p;
+    });
+  }
+  function stSounds() {
+    stPush(function () {
+      var p = stPage('Sounds'), s = stSt();
+      var g = grp(p.body, 'Volume');
+      sSlider(g, 'Media', s.volume || 0, 0, 100, function (v) { return v + '%'; }, function (v) { if (A) A.setVolume(v); });
+      var g2 = grp(p.body, null, 'Silent mode switches the ringer to vibrate.');
+      sSwitch(g2, 'Silent Mode', function () { return !!s.silent; }, function () { if (A) A.toggle('silent'); });
+      return p;
+    });
+  }
+  function stDisplay() {
+    stPush(function () {
+      var p = stPage('Display & Brightness', 'Display & Brightness'), s = stSt();
+      var g = grp(p.body, 'Settings appearance');
+      sSeg(g, stPref.appearance, [['light', 'Light'], ['dark', 'Dark'], ['auto', 'Automatic']], function (v) { stPref.appearance = v; stPrefSave(); stTheme(); });
+      var g2 = grp(p.body, 'Brightness', A ? 'Changing brightness needs the \"modify system settings\" permission; Android will ask the first time.' : '');
+      sSlider(g2, 'Brightness', s.brightness || 50, 1, 100, function (v) { return v + '%'; }, function (v) { if (A) A.setBrightness(v); });
+      sSwitch(g2, 'Auto-Rotate', function () { return s.rotate !== false; }, function () { if (A) A.toggle('rotate'); });
+      var g3 = grp(p.body, 'Text');
+      g3.appendChild(E('div', 'preview', 'The quick brown fox jumps over the lazy dog.'));
+      sSlider(g3, 'Text Size', stPref.textSize, 13, 24, function (v) { return v + ' pt'; }, function (v) { stPref.textSize = v; stPrefSave(); stTheme(); });
+      sSwitch(g3, 'Bold Text', function () { return stPref.bold; }, function (v) { stPref.bold = v; stPrefSave(); stTheme(); });
+      var g4 = grp(p.body);
+      sNav(g4, 'Wallpaper & Icons', null, function () { hide(stg); setTimeout(openCz, 200); });
+      sNav(g4, 'More display settings', null, function () { sys('display'); });
+      return p;
+    });
+  }
+  function stBattery() {
+    stPush(function () {
+      var p = stPage('Battery');
+      var g = grp(p.body, 'Charge');
+      var r = E('div', 'row col'); r.innerHTML = '<div style="display:flex;justify-content:space-between"><span>Battery level</span><span style="color:var(--sub)" id="bl">—</span></div><div class="meter"><i id="bf" style="width:0"></i></div>';
+      g.appendChild(r);
+      try { var pc = A ? A.getBattery() : -1; if (pc >= 0) { r.querySelector('#bl').textContent = pc + '%'; r.querySelector('#bf').style.width = pc + '%'; } } catch (e) {}
+      var g2 = grp(p.body);
+      sNav(g2, 'Battery Saver', null, function () { sys('saver'); });
+      return p;
+    });
+  }
+  function fmtB(n) { if (n >= 1e9) return (n / 1e9).toFixed(1) + ' GB'; if (n >= 1e6) return (n / 1e6).toFixed(1) + ' MB'; return Math.round(n / 1e3) + ' KB'; }
+  function stStorage() {
+    stPush(function () {
+      var p = stPage('Storage');
+      var g = grp(p.body, 'Launcher data');
+      var r = E('div', 'row col'); r.innerHTML = '<div style="display:flex;justify-content:space-between"><span>Used</span><span style="color:var(--sub)" id="su">—</span></div><div class="meter"><i id="sf" style="width:1%"></i></div>';
+      g.appendChild(r);
+      if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(function (e) {
+        var u = e.usage || 0, q = e.quota || 1; r.querySelector('#su').textContent = fmtB(u) + ' of ' + fmtB(q); r.querySelector('#sf').style.width = Math.max(1, Math.min(100, u / q * 100)) + '%';
+      });
+      var g2 = grp(p.body, null, 'Restores the launcher to its default layout and settings. Your account stays signed in.');
+      sAct(g2, 'Reset Launcher Settings', function () {
+        if (!confirm('Reset launcher settings?')) return;
+        try { localStorage.removeItem('ios27cfg'); localStorage.removeItem('ios27st'); } catch (e) {}
+        location.reload();
+      }, 'red');
+      return p;
+    });
+  }
+  function stAbout() {
+    stPush(function () {
+      var p = stPage('About'), g = grp(p.body);
+      var ua = navigator.userAgent, m = /Android ([\d.]+)/.exec(ua), mod = /;\s*([^;)]+)\sBuild/.exec(ua);
+      var rows = [['Launcher build', A && A.appVersion ? A.appVersion() : 'preview'], ['Android', m ? m[1] : '—'], ['Model', mod ? mod[1] : '—'], ['Screen', screen.width + ' × ' + screen.height], ['Refresh rate', A ? A.getHz() + ' Hz' : '—']];
+      rows.forEach(function (x) { g.appendChild(E('div', 'row', '<span class="l">' + esc(x[0]) + '</span><span class="v">' + esc(x[1]) + '</span>')); });
+      var g2 = grp(p.body, 'Permissions');
+      var s = stSt();
+      sNav(g2, 'Control Center actions', s.a11y ? 'On' : 'Off', function () { if (A) A.openAccessibilitySettings(); });
+      sNav(g2, 'Recent apps (usage access)', s.usage ? 'On' : 'Off', function () { if (A) A.requestUsageAccess(); });
+      var g3 = grp(p.body, 'Privacy');
+      g3.appendChild(E('div', 'row col', '<div class="sub" style="font-size:14px;line-height:1.4">The launcher and assistant work offline. The internet is used only when you sign in to your own account server. Passwords are sent over HTTPS and stored only as salted hashes; the sign-in token never leaves the app.</div>'));
+      return p;
+    });
+  }
+
+  /* ----- account ----- */
+  function stAccount() {
+    acctRefresh();
+    var p = stPush(function () { return stPage('Account', 'Account'); });
+    function build() {
+      p.body.innerHTML = ''; p.body.appendChild(E('h1', '', 'Account')); p.note = null;
+      if (!acct.server) {
+        var g = grp(p.body, null, 'No account server is set up yet. Enter its address (see DEPLOY.md in the project).');
+        sNav(g, 'Server', null, function () { stServer(build); });
+        return;
+      }
+      if (!acct.signedIn) {
+        var g1 = grp(p.body, null, 'Pick any ID and password. No Google account, email or phone number is needed. You get a recovery code in case you forget your password.');
+        var idI = sField(g1, 'ID', 'text', 'your launcher ID'), pwI = sField(g1, 'Password', 'password', '8+ characters');
+        var g2 = grp(p.body);
+        var creds = function () {
+          var id = idI.value.trim().toLowerCase(), pw = pwI.value;
+          if (!/^[a-z0-9_.]{3,24}$/.test(id)) { sNote(p, 'ID: 3–24 letters, numbers, dot or underscore.'); return null; }
+          if (pw.length < 8) { sNote(p, 'Password needs at least 8 characters.'); return null; }
+          return { id: id, password: pw };
+        };
+        sAct(g2, 'Create Account', function () {
+          var c = creds(); if (!c) return; sNote(p, 'Creating your account…');
+          api('POST', '/api/register', c, function (s, j) {
+            if (s === 201 || s === 200) { acctRefresh(); pushSettings(true); stRecovery(j.recovery, build); }
+            else sNote(p, errText(s, j));
+          });
+        });
+        sAct(g2, 'Sign In', function () {
+          var c = creds(); if (!c) return; sNote(p, 'Signing in…');
+          api('POST', '/api/login', c, function (s, j) {
+            if (s !== 200) { sNote(p, errText(s, j)); return; }
+            acctRefresh();
+            api('GET', '/api/settings', null, function (s2, j2) {
+              if (s2 === 200 && j2.settings) { applySync(j2.settings); syncState.last = j2.updatedAt; saveSync(); } else pushSettings(true);
+              if (stack[0] && stack[0].refresh) stack[0].refresh();
+              build(); sNote(p, 'Signed in.');
+            });
+          });
+        });
+        sAct(g2, 'Forgot Password', function () { stForgot(build); }, '');
+        if (!acct.builtIn) { var g3 = grp(p.body); sNav(g3, 'Server', acct.server.replace('https://', ''), function () { stServer(build); }); }
+        return;
+      }
+      var g = grp(p.body);
+      g.appendChild(E('div', 'row', '<span class="l">Signed in as</span><span class="v">' + esc(acct.id) + '</span>'));
+      var g2 = grp(p.body, 'Sync', 'Syncs layout, wallpaper choice, icon style, dock and hidden apps. Photos are not uploaded.');
+      sSwitch(g2, 'Auto-sync', function () { return !!syncState.auto; }, function (v) { syncState.auto = v; saveSync(); });
+      sAct(g2, 'Upload Now', function () { sNote(p, 'Uploading…'); stMsgEl = p.note; pushSettings(false); });
+      sAct(g2, 'Download Settings', function () { sNote(p, 'Downloading…'); stMsgEl = p.note; pullSettings(); });
+      var g3 = grp(p.body, 'Security');
+      sNav(g3, 'Change Password', null, function () { stChangePw(); });
+      sNav(g3, 'New Recovery Code', null, function () { stNewRc(build); });
+      var g4 = grp(p.body);
+      sAct(g4, 'Sign Out', function () {
+        api('POST', '/api/logout', {}, function () { if (A) A.acctSignOut(); acctRefresh(); if (stack[0] && stack[0].refresh) stack[0].refresh(); build(); });
+      }, 'tint');
+      sNav(g4, 'Delete Account', null, function () { stDelete(build); });
+      if (!acct.builtIn) { var g5 = grp(p.body); sNav(g5, 'Server', acct.server.replace('https://', ''), function () { stServer(build); }); }
+    }
+    stMsgEl = null; p.rebuild = build; build();
+  }
+  // status text for pages built by stAccount goes to p.note; sync callbacks use stNote(), so point it at the visible page
+  var _stNote = stNote;
+  stNote = function (t) { var top = stack[stack.length - 1]; if (top && top.body) sNote(top, t); };
+  function stRecovery(code, done) {
+    var p = stPush(function () { return stPage('Recovery Code', 'Recovery Code'); });
+    var g = grp(p.body, null, 'Save this code somewhere safe (a note or screenshot). It is the only way to reset your password if you forget it — there is no email. It is shown once.');
+    g.appendChild(E('div', 'row col', '<div class="rc">' + esc(code || '') + '</div>'));
+    var g2 = grp(p.body);
+    sAct(g2, 'Copy Code', function () { try { navigator.clipboard.writeText(code).then(function () { sNote(p, 'Copied.'); }, function () { sNote(p, 'Press and hold the code to copy it.'); }); } catch (e) { sNote(p, 'Press and hold the code to copy it.'); } });
+    sAct(g2, 'I’ve Saved It', function () { stPop(); if (stack[0] && stack[0].refresh) stack[0].refresh(); if (done) done(); }, 'tint');
+  }
+  function stForgot(done) {
+    var p = stPush(function () { return stPage('Forgot Password', 'Reset Password'); });
+    var g = grp(p.body, null, 'Enter your ID, the recovery code you saved at sign-up, and a new password.');
+    var idI = sField(g, 'ID', 'text', 'your launcher ID'), rcI = sField(g, 'Code', 'text', 'XXXXX-XXXXX-XXXXX-XXXXX'), pwI = sField(g, 'New password', 'password', '8+ characters');
+    var g2 = grp(p.body);
+    sAct(g2, 'Reset Password', function () {
+      var id = idI.value.trim().toLowerCase(), rc = rcI.value.trim(), pw = pwI.value;
+      if (!id || !rc) { sNote(p, 'Enter your ID and recovery code.'); return; }
+      if (pw.length < 8) { sNote(p, 'New password needs at least 8 characters.'); return; }
+      sNote(p, 'Resetting…');
+      api('POST', '/api/recover', { id: id, recovery: rc, newPassword: pw }, function (s, j) {
+        if (s !== 200) { sNote(p, errText(s, j)); return; }
+        acctRefresh(); stPop(); if (stack[0] && stack[0].refresh) stack[0].refresh();
+        stRecovery(j.recovery, done); if (done) done();
+      });
+    });
+  }
+  function stChangePw() {
+    var p = stPush(function () { return stPage('Change Password', 'Change Password'); });
+    var g = grp(p.body, null, 'Changing your password signs out your other devices.');
+    var oI = sField(g, 'Current', 'password', 'current password'), nI = sField(g, 'New', 'password', '8+ characters');
+    var g2 = grp(p.body);
+    sAct(g2, 'Change Password', function () {
+      if (nI.value.length < 8) { sNote(p, 'New password needs at least 8 characters.'); return; }
+      api('POST', '/api/password', { oldPassword: oI.value, newPassword: nI.value }, function (s, j) {
+        if (s === 200) { oI.value = ''; nI.value = ''; sNote(p, 'Password changed.'); } else sNote(p, errText(s, j));
+      });
+    });
+  }
+  function stNewRc(done) {
+    var p = stPush(function () { return stPage('Recovery Code', 'New Recovery Code'); });
+    var g = grp(p.body, null, 'Your old recovery code stops working as soon as you make a new one.');
+    var pwI = sField(g, 'Password', 'password', 'your password');
+    var g2 = grp(p.body);
+    sAct(g2, 'Create New Code', function () {
+      api('POST', '/api/recovery-code', { password: pwI.value }, function (s, j) {
+        if (s === 200) { stPop(); stRecovery(j.recovery, done); } else sNote(p, errText(s, j));
+      });
+    });
+  }
+  function stDelete(done) {
+    var p = stPush(function () { return stPage('Delete Account', 'Delete Account'); });
+    var g = grp(p.body, null, 'This permanently deletes your launcher account and its saved settings from the server. This phone keeps its own settings.');
+    var pwI = sField(g, 'Password', 'password', 'your password');
+    var g2 = grp(p.body);
+    sAct(g2, 'Delete Account', function () {
+      if (!pwI.value) { sNote(p, 'Type your password first.'); return; }
+      if (!confirm('Delete your account for good?')) return;
+      api('POST', '/api/account/delete', { password: pwI.value }, function (s, j) {
+        if (s === 200) { if (A) A.acctSignOut(); acctRefresh(); stPop(); if (stack[0] && stack[0].refresh) stack[0].refresh(); if (done) done(); }
+        else sNote(p, errText(s, j));
+      });
+    }, 'red');
+  }
+  function stServer(done) {
+    var p = stPush(function () { return stPage('Server', 'Server'); });
+    var g = grp(p.body, null, 'The https:// address of your launcher account server.');
+    var sI = sField(g, 'Address', 'url', 'https://your-server.example.com', acct.server || '');
+    var g2 = grp(p.body);
+    function saveIt() { var e = A ? A.acctSetServer(sI.value) : 'Only works inside the launcher app'; if (e) { sNote(p, e); return false; } acctRefresh(); sNote(p, 'Saved.'); return true; }
+    sAct(g2, 'Save', function () { if (saveIt() && done) done(); });
+    sAct(g2, 'Test Connection', function () {
+      if (!saveIt()) return; sNote(p, 'Testing…');
+      api('GET', '/health', null, function (s, j) { sNote(p, (s === 200 && j.ok) ? 'Connected ✓' : 'Could not reach the server: ' + errText(s, j)); });
+    });
+  }
+
+  function acctRefresh() {
+    if (A) { try { acct = JSON.parse(A.acctState()); } catch (e) {} }
+    if (stack[0] && stack[0].refresh) stack[0].refresh();
+  }
+  var storeCtl = null;
+  function openStore() {
+    closeAll(); acctRefresh();
+    var env = {
+      A: A, api: api, server: function () { return acct.server || ''; }, acct: function () { return acct; }, refreshAcct: acctRefresh,
+      close: function () { hide(stor); }, openSettings: function () { hide(stor); setTimeout(openSt, 220); }
+    };
+    if (!storeCtl && window.StoreUI) storeCtl = StoreUI.mount($('storeHost'), env); else if (storeCtl) storeCtl.open();
+    show(stor);
+  }
+  var wxCtl = null;
+  function openWeather() {
+    closeAll();
+    if (!wxCtl && window.WeatherUI) wxCtl = WeatherUI.mount($('weatherHost'), { close: function () { hide(wxs); } }); else if (wxCtl) wxCtl.open();
+    show(wxs);
+  }
+  $('psearch').addEventListener('click', function () { openLib(); });
+  function openSt() {
+    closeAll(); stTheme(); acctRefresh();
+    stShadow.innerHTML = '<style>' + ST_CSS + '</style><div id="app"></div>';
+    stApp = stShadow.getElementById('app'); stack = [];
+    var r = stRootPage(); stApp.appendChild(r.el); stack = [r];
+    show(stg);
+  }
+  window.stBack = function () { return stPop(); };
+  acctRefresh();
+
+  /* ---------- Gestures ---------- */
+  var sx = 0, sy = 0, sT = 0, fromGrab = false, fromDock = false;
+  document.addEventListener('touchstart', function (e) {
+    var t = e.touches[0]; sx = t.clientX; sy = t.clientY; sT = Date.now();
+    fromGrab = e.target.id === 'grab';
+    fromDock = !!(e.target.closest && e.target.closest('#dock'));
+  }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    if (locked) return;
+    var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (fromGrab && dy > 40) {                          // pull down from the top
+      if (sx > window.innerWidth * 0.55) openCC();
+      else if (A) A.openNotifications(); else openCC();
+      return;
+    }
+    if (isOpen(cc)) { var wr = ccBuilt ? ccQ('#wrap') : null; if (dy < -60 && !ccNoClose && !(wr && wr.scrollHeight > wr.clientHeight + 4)) hide(cc); return; }   // a scrollable sheet scrolls instead of closing
+    if (anyOpen()) return;
+    if (dy < -70 && Math.abs(dx) < Math.abs(dy) * 0.6) {  // swipe up: dock = Recents, elsewhere = App Library
+      if (fromDock) openRecents(); else openLib();
+    }
+  });
+
+  window.onBack = function () {
+    if (locked) return true;
+    if (isOpen(stg) && stack.length > 1) { stPop(); return true; }
+    if (isOpen(stor) && storeCtl && storeCtl.depth() > 1) { storeCtl.back(); return true; }
+    if (isOpen(wxs) && wxCtl && wxCtl.back()) return true;
+    if (anyOpen()) { closeAll(); return true; }
+    return false;
+  };
+  window.onHome = function () { closeAll(); $('pages').scrollTo({ left: 0, behavior: 'smooth' }); };
+  window.onAppsChanged = render;
+  window.onResumed = function () { if (isOpen(cc)) refresh(); if (isOpen(stor) && storeCtl) storeCtl.resumed(); };
+
+  applyCfg();
+  render();
+  if (cfg.lockscreen) showLock();
+})();
+</script>
+</body>
+</html>
