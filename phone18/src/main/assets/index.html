@@ -338,10 +338,15 @@
     ['graphite', 'Graphite', '#12141a', [[25,15,70,45,'#5a6173'],[85,85,70,50,'#3a4a6a']]],
     ['mono', 'Silver', '#cfd3dc', [[20,15,60,40,'#ffffff'],[85,80,70,45,'#9aa3b5']]]
   ];
+  /* Video wallpapers (bundled clips, looped and muted) */
+  var VIDS = [['vorig', 'Hellcat Night', 'orig'], ['vneon', 'Hellcat Neon', 'neon'], ['vnoir', 'Hellcat Noir', 'noir'], ['vember', 'Hellcat Ember', 'ember'], ['vice', 'Hellcat Ice', 'ice'], ['vdream', 'Hellcat Dream', 'dream']];
   var WALLS = {};
+  VIDS.forEach(function (v) { WALLS[v[0]] = { name: v[1] + ' \u25b6 Video', base: '#000', blobs: [], css: 'url("wall_' + v[2] + '.jpg") center/cover', live: false, video: 'wall_' + v[2] + '.mp4' }; });
   DEFS.forEach(function (d) { WALLS[d[0]] = { name: d[1] + (d[4] ? ' ● Live' : ''), base: d[2], blobs: d[3], css: mesh(d[2], d[3]), live: !!d[4] }; });
   var SCRIM = 'linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.30))';
 
+  function wallVideo(play) { var v = $('wall').querySelector('video'); if (!v) return; if (play) { var q = v.play(); if (q && q.catch) q.catch(function () {}); } else v.pause(); }
+  document.addEventListener('visibilitychange', function () { wallVideo(!document.hidden && !document.body.classList.contains('sheetOpen')); });
   function applyWall() {
     var w = $('wall'), l = $('lsWall'), bg;
     w.innerHTML = '';
@@ -349,6 +354,16 @@
     if (cfg.wall === 'custom' && customWall()) { bg = SCRIM + ', url("' + customWall() + '") center/cover'; w.style.background = bg; l.style.background = bg; return; }
     var p = WALLS[cfg.wall] || WALLS.liquid;
     l.style.background = SCRIM + ', ' + p.css;
+    if (p.video) {
+      w.style.background = '#000';
+      var vd = document.createElement('video'); vd.src = p.video; vd.poster = p.video.replace('.mp4', '.jpg');
+      vd.muted = true; vd.loop = true; vd.autoplay = true; vd.playsInline = true; vd.setAttribute('playsinline', ''); vd.setAttribute('muted', '');
+      vd.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none';
+      w.appendChild(vd);
+      var vs = document.createElement('div'); vs.className = 'scrim'; w.appendChild(vs);
+      var pr = vd.play(); if (pr && pr.catch) pr.catch(function () {});
+      return;
+    }
     if (p.live) {
       w.style.background = p.base;
       p.blobs.forEach(function (b, i) {
@@ -513,14 +528,14 @@
   /* ---------- Sheets (spring in/out) ---------- */
   var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), stg = $('st'), stor = $('store'), wxs = $('weather'), ls = $('ls');
   function isOpen(el) { return el.classList.contains('in'); }
-  function show(el) { el.classList.add('show'); void el.offsetWidth; el.classList.add('in'); document.body.classList.add('sheetOpen'); }
+  function show(el) { el.classList.add('show'); void el.offsetWidth; el.classList.add('in'); document.body.classList.add('sheetOpen'); wallVideo(false); }
   function hide(el) {
     if (!el.classList.contains('show')) return;
     el.classList.remove('in');
     setTimeout(function () {
       if (el.classList.contains('in')) return;
       el.classList.remove('show');
-      if (!anyShown()) document.body.classList.remove('sheetOpen');
+      if (!anyShown()) { document.body.classList.remove('sheetOpen'); wallVideo(true); }
       if (el === stg) { stShadow.innerHTML = ''; stack = []; }
     }, 300);
   }

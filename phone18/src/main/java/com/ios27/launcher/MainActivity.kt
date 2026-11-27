@@ -117,6 +117,7 @@ class MainActivity : AppCompatActivity() {
         webView.setBackgroundColor(Color.TRANSPARENT)
         with(webView.settings) {
             javaScriptEnabled = true
+            mediaPlaybackRequiresUserGesture = false
             domStorageEnabled = true
             allowFileAccess = false      // android_asset/ is still readable
             allowContentAccess = false
