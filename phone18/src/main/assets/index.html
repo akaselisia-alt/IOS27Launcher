@@ -345,11 +345,17 @@
   DEFS.forEach(function (d) { WALLS[d[0]] = { name: d[1] + (d[4] ? ' ● Live' : ''), base: d[2], blobs: d[3], css: mesh(d[2], d[3]), live: !!d[4] }; });
   var SCRIM = 'linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.30))';
 
-  function wallVideo(play) { var v = $('wall').querySelector('video'); if (!v) return; if (play) { var q = v.play(); if (q && q.catch) q.catch(function () {}); } else v.pause(); }
+  function wallVideo(play) {
+    var hv = $('wall').querySelector('video'), lv = $('lsWall').querySelector('video');
+    [hv, lv].forEach(function (v) { if (v) v.pause(); });
+    if (!play) return;
+    var v = (typeof locked !== 'undefined' && locked) ? lv : hv;       // only one clip decodes at a time
+    if (v) { var q = v.play(); if (q && q.catch) q.catch(function () {}); }
+  }
   document.addEventListener('visibilitychange', function () { wallVideo(!document.hidden && !document.body.classList.contains('sheetOpen')); });
   function applyWall() {
     var w = $('wall'), l = $('lsWall'), bg;
-    w.innerHTML = '';
+    w.innerHTML = ''; l.innerHTML = '';
     if (cfg.wall === 'system') { w.style.background = SCRIM; l.style.background = WALLS.liquid.css; $('ls').style.background = '#101018'; return; }
     if (cfg.wall === 'custom' && customWall()) { bg = SCRIM + ', url("' + customWall() + '") center/cover'; w.style.background = bg; l.style.background = bg; return; }
     var p = WALLS[cfg.wall] || WALLS.liquid;
@@ -361,7 +367,10 @@
       vd.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none';
       w.appendChild(vd);
       var vs = document.createElement('div'); vs.className = 'scrim'; w.appendChild(vs);
-      var pr = vd.play(); if (pr && pr.catch) pr.catch(function () {});
+      var lv = vd.cloneNode(false); lv.muted = true; lv.loop = true; lv.autoplay = false; lv.playsInline = true;
+      l.appendChild(lv);
+      var ls2 = document.createElement('div'); ls2.style.cssText = 'position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,.12),rgba(0,0,0,.34))'; l.appendChild(ls2);
+      wallVideo(!document.body.classList.contains('sheetOpen'));
       return;
     }
     if (p.live) {
@@ -868,13 +877,14 @@
     B.style.setProperty('--p', 0); B.classList.remove('unlocking', 'dragging'); B.classList.add('locked');
     ls.classList.remove('leaving'); ls.style.transition = 'none'; ls.style.transform = ''; ls.style.filter = ''; ls.style.opacity = '';
     ls.classList.add('show'); void ls.offsetWidth; ls.style.transition = '';
+    wallVideo(true);
   }
   function unlock() {
     B.classList.remove('dragging', 'locked'); B.classList.add('unlocking');
     ls.style.transition = ''; ls.style.transform = ''; ls.style.filter = ''; ls.style.opacity = '';
     ls.classList.add('leaving');                       // lock screen blurs, zooms and fades away
     setTimeout(function () { B.style.setProperty('--p', 0); }, 30);
-    setTimeout(function () { ls.classList.remove('show', 'leaving'); B.classList.remove('unlocking'); locked = false; }, 680);
+    setTimeout(function () { ls.classList.remove('show', 'leaving'); B.classList.remove('unlocking'); locked = false; wallVideo(!B.classList.contains('sheetOpen')); }, 680);
   }
   function doLock() {
     hide(cc);
