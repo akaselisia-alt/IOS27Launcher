@@ -59,7 +59,8 @@
   /* Overlays: GPU-only transitions (transform + opacity), no blur on big layers */
   .sheet { position: fixed; inset: 0; z-index: 10; display: none; background: rgba(14,14,22,.9); overflow-y: auto; padding: 16px 16px 40px; opacity: 0; transform: translate3d(0, 28px, 0) scale(.975); transition: opacity .22s var(--ease), transform .36s var(--spring); will-change: transform, opacity; overscroll-behavior: contain; }
   .sheet.show { display: block; }
-  #st, #store, #weather, #music { padding: 0; overflow: hidden; background: #000; }
+  #st, #store, #weather, #music, #bi { padding: 0; overflow: hidden; background: #000; }
+  #biHost { position: absolute; inset: 0; display: block; }
   #musicHost { position: absolute; inset: 0; display: block; }
   #weatherHost { position: absolute; inset: 0; display: block; }
   #storeHost { position: absolute; inset: 0; display: block; }
@@ -237,6 +238,7 @@
   <div id="store" class="sheet"><div id="storeHost"></div></div>
   <div id="weather" class="sheet"><div id="weatherHost"></div></div>
   <div id="music" class="sheet"><div id="musicHost"></div></div>
+  <div id="bi" class="sheet"><div id="biHost"></div></div>
 
   <!-- Settings app (built in script, inside a shadow root) -->
   <div id="st" class="sheet"><div id="stHost"></div></div>
@@ -298,6 +300,7 @@
 <script src="store-ui.js"></script>
 <script src="weather-ui.js"></script>
 <script src="music-ui.js"></script>
+<script src="builtin-ui.js"></script>
 <script>
 (function () {
   var A = window.Android;
@@ -421,13 +424,25 @@
       .map(function (n) { return { name: n, pkg: 'demo.' + n.toLowerCase() }; });
   }
 
-  /* Your own icon artwork (PNG files next to this page) for Weather, Fmusic, Calculator and the browser */
-  var ICONFILE = { '__weather__': 'icon_weather.png', '__music__': 'icon_music.png' };
+  /* Icons: your own artwork plus the iOS Icon Pack (MIT) for the standard phone apps. Real apps are matched by package name. */
+  var ICONFILE = { '__weather__': 'icon_weather.png', '__music__': 'icon_music.png', '__settings__': 'ic_settings.png', '__store__': 'ic_appstore.png',
+    '__b_notes__': 'ic_notes.png', '__b_calc__': 'icon_calc.png', '__b_clock__': 'ic_clock.png', '__b_cal__': 'ic_calendar.png', '__b_compass__': 'ic_compass.png', '__b_health__': 'ic_health.png', '__b_wallet__': 'ic_wallet.png' };
+  var ICONRULES = [
+    [/calculator|calc/, 'icon_calc.png'],
+    [/chrome|browser|safari|firefox|opera|\.edge|brave|duckduckgo/, 'icon_browser.png'],
+    [/weather/, 'icon_weather.png'], [/music|\.player/, 'icon_music.png'],
+    [/dialer|\.phone\b|incallui|contacts/, 'ic_phone.png'], [/mms|messag|\.sms/, 'ic_messages.png'], [/camera/, 'ic_camera.png'],
+    [/photos|gallery/, 'ic_photos.png'], [/deskclock|clock|alarm/, 'ic_clock.png'], [/calendar/, 'ic_calendar.png'],
+    [/\.maps|navigation/, 'ic_maps.png'], [/gm$|gmail|\.email|\.mail/, 'ic_mail.png'], [/documentsui|filemanager|\.files|myfiles/, 'ic_files.png'],
+    [/notes|keep|memo/, 'ic_notes.png'], [/com\.android\.settings|\.settings$/, 'ic_settings.png'], [/health|\.fit\b/, 'ic_health.png'],
+    [/wallet|gpay|\.pay$/, 'ic_wallet.png'], [/meet|duo|facetime|videocall/, 'ic_facetime.png'], [/vending|appstore|galaxystore|\.market/, 'ic_appstore.png'],
+    [/compass/, 'ic_compass.png']
+  ];
   function iconFile(app) {
     if (ICONFILE[app.pkg]) return ICONFILE[app.pkg];
-    var p = (app.pkg || '').toLowerCase();
-    if (/calculator|\.calc(ulator)?$|calc/.test(p)) return 'icon_calc.png';
-    if (/chrome|browser|safari|firefox|opera|\.edge|brave|duckduckgo/.test(p)) return 'icon_browser.png';
+    if (/^__/.test(app.pkg || '')) return '';
+    var p = ((app.pkg || '') + ' ' + (app.name || '')).toLowerCase();
+    for (var i = 0; i < ICONRULES.length; i++) if (ICONRULES[i][0].test(p)) return ICONRULES[i][1];
     return '';
   }
   function iconInto(ico, app) {
@@ -456,6 +471,7 @@
       else if (app.pkg === '__store__') openStore();
       else if (app.pkg === '__weather__') openWeather();
       else if (app.pkg === '__music__') openMusic();
+      else if (/^__b_/.test(app.pkg)) openBuiltin(app.pkg.slice(4, -2));
       else if (A) { closeAll(); A.openApp(app.pkg); }
     });
     return el;
@@ -492,6 +508,9 @@
     dockApps.forEach(function (a) { dock.appendChild(tile(a)); });
     dock.appendChild(tile({ name: 'Apps', pkg: '__apps__' }));
 
+    BUILTINS.forEach(function (b) {
+      if (!all.some(function (a) { return b[2].test((a.pkg + ' ' + a.name).toLowerCase()); })) home.push({ name: b[1], pkg: '__b_' + b[0] + '__' });
+    });
     home.unshift({ name: 'Settings', pkg: '__settings__' });
     home.unshift({ name: 'Weather', pkg: '__weather__' });
     home.unshift({ name: 'Fmusic', pkg: '__music__' });
@@ -557,11 +576,12 @@
   tick(); setInterval(tick, 5000);
 
   /* ---------- Sheets (spring in/out) ---------- */
-  var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), stg = $('st'), stor = $('store'), wxs = $('weather'), mus = $('music'), ls = $('ls');
+  var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), stg = $('st'), stor = $('store'), wxs = $('weather'), mus = $('music'), bis = $('bi'), ls = $('ls');
   function isOpen(el) { return el.classList.contains('in'); }
   function show(el) { el.classList.add('show'); void el.offsetWidth; el.classList.add('in'); document.body.classList.add('sheetOpen'); wallVideo(false); }
   function hide(el) {
     if (!el.classList.contains('show')) return;
+    if (el === bis && window.BuiltinUI) BuiltinUI.close();
     el.classList.remove('in');
     setTimeout(function () {
       if (el.classList.contains('in')) return;
@@ -570,9 +590,9 @@
       if (el === stg) { stShadow.innerHTML = ''; stack = []; }
     }, 300);
   }
-  function anyShown() { return [lib, cz, cc, rc, ai, stg, stor, wxs, mus].some(function (e) { return e.classList.contains('show'); }); }
-  function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai) || isOpen(stg) || isOpen(stor) || isOpen(wxs) || isOpen(mus); }
-  function closeAll() { [lib, cz, cc, rc, ai, stg, stor, wxs, mus].forEach(hide); }
+  function anyShown() { return [lib, cz, cc, rc, ai, stg, stor, wxs, mus, bis].some(function (e) { return e.classList.contains('show'); }); }
+  function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai) || isOpen(stg) || isOpen(stor) || isOpen(wxs) || isOpen(mus) || isOpen(bis); }
+  function closeAll() { [lib, cz, cc, rc, ai, stg, stor, wxs, mus, bis].forEach(hide); }
   ['libDone', 'czDone', 'rcDone', 'aiDone'].forEach(function (id) { $(id).addEventListener('click', closeAll); });
 
   function openLib() {
@@ -1807,6 +1827,13 @@ input.txt { flex: 1; min-width: 0; border: 0; outline: 0; background: transparen
     };
     if (!storeCtl && window.StoreUI) storeCtl = StoreUI.mount($('storeHost'), env); else if (storeCtl) storeCtl.open();
     show(stor);
+  }
+  /* Built-in apps for standard icons that have no app on this phone */
+  var BUILTINS = [['notes', 'Notes', /notes|keep|memo/], ['calc', 'Calculator', /calc/], ['clock', 'Clock', /clock|alarm/], ['cal', 'Calendar', /calendar/], ['compass', 'Compass', /compass/], ['health', 'Health', /health|\.fit\b/], ['wallet', 'Wallet', /wallet/]];
+  function openBuiltin(id) {
+    closeAll();
+    if (window.BuiltinUI) BuiltinUI.open($('biHost'), id, { close: function () { hide(bis); } });
+    show(bis);
   }
   var musCtl = null;
   function openMusic() {
