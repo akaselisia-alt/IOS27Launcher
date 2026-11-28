@@ -104,9 +104,9 @@ class StoreSupport(
     }
 
     fun pick(kind: String) {
-        if (kind != "apk" && kind != "image") return
+        if (kind != "apk" && kind != "image" && kind != "audio") return
         pickKind = kind
-        act.runOnUiThread { picker.launch(if (kind == "image") arrayOf("image/*") else arrayOf("*/*")) }
+        act.runOnUiThread { picker.launch(when (kind) { "image" -> arrayOf("image/*"); "audio" -> arrayOf("audio/*"); else -> arrayOf("*/*") }) }
     }
 
     /* ---------- install ---------- */
@@ -219,9 +219,15 @@ class StoreSupport(
     /* ---------- upload (developers) ---------- */
 
     fun upload(id: Int, kind: String, path: String) {
-        val ok = Regex("^/api/store/apps/[0-9a-f]{16}/(apk|icon)(\\?versionName=[A-Za-z0-9_.%+-]{0,60})?$").matches(path)
+        val allowed = when (kind) {
+            "apk" -> Regex("^/api/store/apps/[0-9a-f]{16}/apk(\\?versionName=[A-Za-z0-9_.%+-]{0,60})?$")
+            "image" -> Regex("^/api/(store/apps/[0-9a-f]{16}/icon|music/songs/[0-9a-f]{16}/cover)$")
+            "audio" -> Regex("^/api/music/songs/[0-9a-f]{16}/audio$")
+            else -> null
+        }
+        val ok = allowed != null && allowed.matches(path)
         val uri = picked[kind]
-        if (!ok || uri == null || base().isEmpty() || (kind == "apk") != path.contains("/apk")) { upProgress(id, "error", 0, "Choose a file first"); return }
+        if (!ok || uri == null || base().isEmpty()) { upProgress(id, "error", 0, "Choose a file first"); return }
         val size = sizes[kind] ?: -1L
         exec.execute {
             try {

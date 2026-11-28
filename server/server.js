@@ -163,6 +163,7 @@ function dropTokens(id, exceptKey) {
   for (const [k, v] of tokens) if (v.id === id && k !== exceptKey) tokens.delete(k);
 }
 
+const music = require('./music')({ extra, save: () => save(), authed, readBody, send, fail, limited, DATA_DIR, clientIp });
 const store = require('./store')({ extra, save: () => save(), authed, readBody, send, fail, limited, DATA_DIR, clientIp, users });
 
 // ---- routes ----
@@ -249,6 +250,7 @@ async function route(req, res) {
     return send(res, 200, { id, token, recovery });
   }
 
+  if (await music(req, res, p, url)) return;
   if (await store(req, res, p, url)) return;
 
   // everything below needs a signed-in session

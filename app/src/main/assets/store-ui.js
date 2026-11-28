@@ -332,8 +332,8 @@
     /* ----- native callbacks ----- */
     var prevProg = window.onStoreProgress, prevPick = window.onStorePicked, prevUp = window.onStoreUpload;
     window.onStoreProgress = function (id, state, pct, text) { var f = installReq[id]; if (f) f(state, pct, text); else if (prevProg) prevProg(id, state, pct, text); };
-    window.onStorePicked = function (kind, name, size) { var f = pickInfo[kind]; if (f) f(name, size); };
-    window.onStoreUpload = function (id, state, pct, text) { var f = upCb[id]; if (f) f(state, pct, text); };
+    window.onStorePicked = function (kind, name, size) { var f = (!env.active || env.active()) ? pickInfo[kind] : null; if (f) f(name, size); else if (prevPick) prevPick(kind, name, size); };
+    window.onStoreUpload = function (id, state, pct, text) { var f = upCb[id]; if (f) f(state, pct, text); else if (prevUp) prevUp(id, state, pct, text); };
 
     function init() {
       buildShell();

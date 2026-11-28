@@ -58,3 +58,13 @@ Things to know:
 - The server checks that an upload is a real APK and records its SHA-256 (the app verifies it before installing), but it **cannot scan for malware**. Review apps before approving.
 - Phones must allow "install unknown apps" for the Store/launcher the first time.
 - Set the `LAUNCHER_SERVER` repository variable and re-run the workflow so both APKs know your server.
+
+## Fmusic (post and stream songs)
+
+The Fmusic app in both launchers streams songs that people post to your server. Nothing extra to install: it runs on the same server and needs the same disk.
+
+- Anyone with an account posts a song from the **Post** tab: audio file (mp3, m4a, ogg, wav, flac), title, artist, genre, optional cover art, and a tick-box confirming they own the rights. It goes live at once. Anyone can stream it without signing in.
+- Listeners can like songs, make playlists, search, and report a song. Three different people reporting a song hides it until an admin (`ADMIN_IDS`) restores or deletes it.
+- Limits: 30 MB per song (`MAX_AUDIO_MB`), 40 songs per person, 10 uploads a day.
+- Songs are stored in `DATA_DIR/songs`. Use a persistent disk, the same as for the Store, and back it up.
+- You are responsible for what is posted. Remove songs that break copyright when you are told about them. Phones stop playback when the screen turns off, because the app has no background music service yet.

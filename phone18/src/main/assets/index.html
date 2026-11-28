@@ -56,7 +56,8 @@
   /* Overlays: GPU-only transitions (transform + opacity), no blur on big layers */
   .sheet { position: fixed; inset: 0; z-index: 10; display: none; background: rgba(14,14,22,.9); overflow-y: auto; padding: 16px 16px 40px; opacity: 0; transform: translate3d(0, 28px, 0) scale(.975); transition: opacity .22s var(--ease), transform .36s var(--spring); will-change: transform, opacity; overscroll-behavior: contain; }
   .sheet.show { display: block; }
-  #st, #store, #weather { padding: 0; overflow: hidden; background: #000; }
+  #st, #store, #weather, #music { padding: 0; overflow: hidden; background: #000; }
+  #musicHost { position: absolute; inset: 0; display: block; }
   #weatherHost { position: absolute; inset: 0; display: block; }
   #storeHost { position: absolute; inset: 0; display: block; }
   #stHost { position: absolute; inset: 0; display: block; }
@@ -232,6 +233,7 @@
   <!-- Store (built by store-ui.js inside a shadow root) -->
   <div id="store" class="sheet"><div id="storeHost"></div></div>
   <div id="weather" class="sheet"><div id="weatherHost"></div></div>
+  <div id="music" class="sheet"><div id="musicHost"></div></div>
 
   <!-- Settings app (built in script, inside a shadow root) -->
   <div id="st" class="sheet"><div id="stHost"></div></div>
@@ -292,6 +294,7 @@
 
 <script src="store-ui.js"></script>
 <script src="weather-ui.js"></script>
+<script src="music-ui.js"></script>
 <script>
 (function () {
   var A = window.Android;
@@ -397,6 +400,7 @@
 
   /* ---------- Apps ---------- */
   var VIRT = {
+    '__music__': { name: 'Fmusic', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gmu" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6b8b"/><stop offset="1" stop-color="#e0103a"/></linearGradient></defs><rect width="48" height="48" fill="url(#gmu)"/><path d="M19 32V15l15-3v17" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="15.5" cy="32.5" r="4.2" fill="#fff"/><circle cx="30.5" cy="29.5" r="4.2" fill="#fff"/></svg>' },
     '__weather__': { name: 'Weather', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gwx" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4aa8ff"/><stop offset="1" stop-color="#2a5fe0"/></linearGradient></defs><rect width="48" height="48" fill="url(#gwx)"/><circle cx="19" cy="19" r="7.5" fill="#ffd24a"/><path d="M15 36a6.5 6.5 0 0 1 .8-12.9A8.5 8.5 0 0 1 32 25a5.8 5.8 0 0 1-.6 11z" fill="#fff"/></svg>' },
     '__store__': { name: 'Store', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gst" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ec1ff"/><stop offset="1" stop-color="#0a47ce"/></linearGradient></defs><rect width="48" height="48" fill="url(#gst)"/><path d="M12 18h24l2 20a2 2 0 0 1-2 2H12a2 2 0 0 1-2-2z" fill="#fff"/><path d="M17 22v-4a7 7 0 0 1 14 0v4" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><path d="M18 27c0 6 12 6 12 0" fill="none" stroke="#1d6bf0" stroke-width="3" stroke-linecap="round"/></svg>' },
     '__settings__': { name: 'Settings', svg: '<svg viewBox="0 0 48 48"><defs><linearGradient id="gs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9aa0b4"/><stop offset="1" stop-color="#4a4e60"/></linearGradient></defs><rect width="48" height="48" fill="url(#gs)"/><circle cx="24" cy="24" r="7" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M24 8v6M24 34v6M8 24h6M34 24h6M12.7 12.7l4.2 4.2M31.1 31.1l4.2 4.2M35.3 12.7l-4.2 4.2M16.9 31.1l-4.2 4.2" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/></svg>' },
@@ -435,6 +439,7 @@
       else if (app.pkg === '__settings__') openSt();
       else if (app.pkg === '__store__') openStore();
       else if (app.pkg === '__weather__') openWeather();
+      else if (app.pkg === '__music__') openMusic();
       else if (A) { closeAll(); A.openApp(app.pkg); }
     });
     return el;
@@ -473,6 +478,7 @@
 
     home.unshift({ name: 'Settings', pkg: '__settings__' });
     home.unshift({ name: 'Weather', pkg: '__weather__' });
+    home.unshift({ name: 'Fmusic', pkg: '__music__' });
     home.unshift({ name: 'Store', pkg: '__store__' });
     home.unshift({ name: 'Customize', pkg: '__custom__' });
     home.unshift({ name: 'Assistant', pkg: '__ai__' });
@@ -535,7 +541,7 @@
   tick(); setInterval(tick, 5000);
 
   /* ---------- Sheets (spring in/out) ---------- */
-  var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), stg = $('st'), stor = $('store'), wxs = $('weather'), ls = $('ls');
+  var lib = $('lib'), cz = $('cz'), cc = $('cc'), rc = $('rc'), ai = $('ai'), stg = $('st'), stor = $('store'), wxs = $('weather'), mus = $('music'), ls = $('ls');
   function isOpen(el) { return el.classList.contains('in'); }
   function show(el) { el.classList.add('show'); void el.offsetWidth; el.classList.add('in'); document.body.classList.add('sheetOpen'); wallVideo(false); }
   function hide(el) {
@@ -548,9 +554,9 @@
       if (el === stg) { stShadow.innerHTML = ''; stack = []; }
     }, 300);
   }
-  function anyShown() { return [lib, cz, cc, rc, ai, stg, stor, wxs].some(function (e) { return e.classList.contains('show'); }); }
-  function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai) || isOpen(stg) || isOpen(stor) || isOpen(wxs); }
-  function closeAll() { [lib, cz, cc, rc, ai, stg, stor, wxs].forEach(hide); }
+  function anyShown() { return [lib, cz, cc, rc, ai, stg, stor, wxs, mus].some(function (e) { return e.classList.contains('show'); }); }
+  function anyOpen() { return isOpen(lib) || isOpen(cz) || isOpen(cc) || isOpen(rc) || isOpen(ai) || isOpen(stg) || isOpen(stor) || isOpen(wxs) || isOpen(mus); }
+  function closeAll() { [lib, cz, cc, rc, ai, stg, stor, wxs, mus].forEach(hide); }
   ['libDone', 'czDone', 'rcDone', 'aiDone'].forEach(function (id) { $(id).addEventListener('click', closeAll); });
 
   function openLib() {
@@ -1146,6 +1152,7 @@
       else if (w === 'launcher_settings') openSt();
       else if (w === 'store') openStore();
       else if (w === 'weather') openWeather();
+      else if (w === 'music') openMusic();
       else return 'I can\'t show that.';
       return '';
     },
@@ -1168,7 +1175,7 @@
   /* --- offline command understanding --- */
   var TOG = { torch: 'torch', flashlight: 'torch', 'flash light': 'torch', light: 'torch', dnd: 'dnd', 'do not disturb': 'dnd', 'dont disturb': 'dnd', focus: 'dnd', silent: 'silent', 'silent mode': 'silent', mute: 'silent', vibrate: 'silent', rotation: 'rotate', 'auto rotate': 'rotate', autorotate: 'rotate', rotate: 'rotate', 'screen rotation': 'rotate' };
   var SHORT = { wifi: 'wifi', 'wi-fi': 'wifi', bluetooth: 'bt', 'mobile data': 'data', data: 'data', internet: 'data', 'airplane mode': 'air', airplane: 'air', 'flight mode': 'air', location: 'location', gps: 'location', hotspot: 'hotspot', nfc: 'nfc', 'battery saver': 'saver', 'power saving': 'saver', settings: 'settings', camera: 'camera', calculator: 'calc', clock: 'clock', alarms: 'clock', display: 'display' };
-  var PANELS = { 'control center': 'control_center', 'app library': 'app_library', customize: 'customize', recents: 'recents', 'recent apps': 'recents', 'lock screen': 'lock_screen', 'launcher settings': 'launcher_settings', account: 'launcher_settings', 'my account': 'launcher_settings', store: 'store', 'app store': 'store', 'play store': 'store', weather: 'weather', 'the weather': 'weather' };
+  var PANELS = { 'control center': 'control_center', 'app library': 'app_library', customize: 'customize', recents: 'recents', 'recent apps': 'recents', 'lock screen': 'lock_screen', 'launcher settings': 'launcher_settings', account: 'launcher_settings', 'my account': 'launcher_settings', store: 'store', 'app store': 'store', 'play store': 'store', weather: 'weather', 'the weather': 'weather', music: 'music', fmusic: 'music', songs: 'music' };
 
   function parseTime(s) {
     var m = s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/);
@@ -1780,10 +1787,20 @@ input.txt { flex: 1; min-width: 0; border: 0; outline: 0; background: transparen
     closeAll(); acctRefresh();
     var env = {
       A: A, api: api, server: function () { return acct.server || ''; }, acct: function () { return acct; }, refreshAcct: acctRefresh,
-      close: function () { hide(stor); }, openSettings: function () { hide(stor); setTimeout(openSt, 220); }
+      close: function () { hide(stor); }, active: function () { return isOpen(stor); }, openSettings: function () { hide(stor); setTimeout(openSt, 220); }
     };
     if (!storeCtl && window.StoreUI) storeCtl = StoreUI.mount($('storeHost'), env); else if (storeCtl) storeCtl.open();
     show(stor);
+  }
+  var musCtl = null;
+  function openMusic() {
+    closeAll(); acctRefresh();
+    var env = {
+      A: A, api: api, server: function () { return acct.server || ''; }, acct: function () { return acct; }, refreshAcct: acctRefresh,
+      close: function () { hide(mus); }, active: function () { return isOpen(mus); }
+    };
+    if (!musCtl && window.MusicUI) musCtl = MusicUI.mount($('musicHost'), env); else if (musCtl) musCtl.open();
+    show(mus);
   }
   var wxCtl = null;
   function openWeather() {
@@ -1829,12 +1846,13 @@ input.txt { flex: 1; min-width: 0; border: 0; outline: 0; background: transparen
     if (isOpen(stg) && stack.length > 1) { stPop(); return true; }
     if (isOpen(stor) && storeCtl && storeCtl.depth() > 1) { storeCtl.back(); return true; }
     if (isOpen(wxs) && wxCtl && wxCtl.back()) return true;
+    if (isOpen(mus) && musCtl && musCtl.depth() > 1) { musCtl.back(); return true; }
     if (anyOpen()) { closeAll(); return true; }
     return false;
   };
   window.onHome = function () { closeAll(); $('pages').scrollTo({ left: 0, behavior: 'smooth' }); };
   window.onAppsChanged = render;
-  window.onResumed = function () { if (isOpen(cc)) refresh(); if (isOpen(stor) && storeCtl) storeCtl.resumed(); };
+  window.onResumed = function () { if (isOpen(cc)) refresh(); if (isOpen(stor) && storeCtl) storeCtl.resumed(); if (isOpen(mus) && musCtl) musCtl.resumed(); };
 
   applyCfg();
   render();
