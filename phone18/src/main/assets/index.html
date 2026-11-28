@@ -191,6 +191,37 @@
   .wg .big { font-size: 42px; font-weight: 300; line-height: 1.05; margin-top: 6px; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
   .wg .t { font-size: 13px; opacity: .85; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .wg:active { transform: scale(.97); transition: transform .12s; }
+
+  /* ---- Phone 18 OS layer: gesture bar, widget stacks, glass picker ---- */
+  #hbar { position: fixed; left: 50%; bottom: 6px; width: 38%; height: 5px; margin-left: -19%; border-radius: 3px; background: rgba(255,255,255,.85); z-index: 15; box-shadow: 0 1px 4px rgba(0,0,0,.3); transition: transform .25s var(--spring), opacity .3s; pointer-events: none; }
+  #hzone { position: fixed; left: 0; right: 0; bottom: 0; height: 26px; z-index: 16; touch-action: none; }
+  body.locked #hbar, body.locked #hzone { display: none; }
+  body.sheetOpen #hbar { opacity: .9; }
+  #dock { margin-bottom: 20px !important; }
+  .stk { position: relative; border-radius: 26px; min-height: 150px; min-width: 0; overflow: hidden; }
+  .stk .trk { display: flex; height: 100%; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 26px; }
+  .stk .trk::-webkit-scrollbar { display: none; }
+  .stk .wg { flex: 0 0 100%; scroll-snap-align: center; height: 100%; min-height: 150px; box-sizing: border-box; }
+  .stk .sd { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; z-index: 2; pointer-events: none; }
+  .stk .sd i { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,.4); }
+  .stk .sd i.on { background: #fff; }
+  .wg .sub2 { font-size: 12px; opacity: .8; margin-top: 6px; line-height: 1.35; white-space: pre-line; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  .wg .bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.25); margin-top: 10px; overflow: hidden; }
+  .wg .bar b { display: block; height: 100%; background: #fff; border-radius: 3px; }
+  #wpick { position: fixed; inset: 0; z-index: 60; display: none; align-items: flex-end; background: rgba(0,0,0,.28); }
+  #wpick.in { display: flex; }
+  #wpick .pn { width: 100%; box-sizing: border-box; padding: 18px 18px 34px; border-radius: 30px 30px 0 0; color: #fff; background: rgba(40,40,46,.55); backdrop-filter: blur(36px) saturate(1.8); -webkit-backdrop-filter: blur(36px) saturate(1.8); border-top: .5px solid rgba(255,255,255,.35); animation: wup .35s var(--spring); }
+  @keyframes wup { from { transform: translateY(100%); } to { transform: none; } }
+  #wpick h3 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+  #wpick p { margin: 0 0 12px; font-size: 12.5px; opacity: .7; }
+  #wpick .ch { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  #wpick .ch span { padding: 9px 14px; border-radius: 16px; font-size: 14px; background: rgba(255,255,255,.14); border: .5px solid rgba(255,255,255,.25); }
+  #wpick .ch span.on { background: rgba(255,255,255,.85); color: #111; font-weight: 600; }
+  #wpick .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 2px; font-size: 15px; }
+  #wpick .btn { display: block; text-align: center; margin-top: 10px; padding: 13px; border-radius: 16px; background: #fff; color: #111; font-weight: 600; }
+  #wpick .tg { width: 46px; height: 28px; border-radius: 14px; background: rgba(255,255,255,.25); position: relative; transition: background .2s; }
+  #wpick .tg::after { content: ""; position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .25s var(--spring); }
+  #wpick .tg.on { background: #30d158; } #wpick .tg.on::after { transform: translateX(18px); }
 </style>
 </head>
 <body>
@@ -201,6 +232,8 @@
   <div id="dots"></div>
   <div id="psearch" role="button"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>Search</div>
   <div id="dock"></div>
+  <div id="hbar"></div><div id="hzone"></div>
+  <div id="wpick"><div class="pn" id="wpn"></div></div>
   <div id="msg"></div>
 
   <!-- App Library -->
@@ -532,26 +565,101 @@
     updateDots();
   }
 
-  /* Home screen widgets: live clock + the last weather you looked at */
-  function widgets() {
-    var row = document.createElement('div'); row.className = 'wrow';
-    var c = document.createElement('div'); c.className = 'wg';
-    c.innerHTML = '<small id="wgDate"></small><div class="big" id="wgTime"></div><div class="t">Local time</div>';
-    c.addEventListener('click', function () { if (A) { closeAll(); A.openApp('com.google.android.deskclock'); } });
-    var w = document.createElement('div'); w.className = 'wg';
-    var place = null, cache = null;
-    try { place = JSON.parse(localStorage.getItem('wx.place')); cache = JSON.parse(localStorage.getItem('wx.cache')); } catch (e) {}
-    if (place && cache && cache.d && cache.d.current) {
-      var k = cache.d.current, dl = cache.d.daily;
-      w.innerHTML = '<small>' + String(place.name).replace(/[<>&]/g, '') + '</small><div class="big">' + Math.round(k.temperature_2m) + '\u00b0</div><div class="t">H:' + Math.round(dl.temperature_2m_max[0]) + '\u00b0  L:' + Math.round(dl.temperature_2m_min[0]) + '\u00b0</div>';
-    } else {
-      w.innerHTML = '<small>Weather</small><div class="big">\u2600\ufe0e</div><div class="t">Tap to set your city</div>';
+  /* Home screen widget stacks: swipe a stack to flip, long-press to personalise, smart order by time of day */
+  var WKINDS = { clock: 'Clock', weather: 'Weather', calendar: 'Calendar', music: 'Music', health: 'Health', notes: 'Notes' };
+  function wcfg() {
+    var d = { a: ['clock', 'calendar', 'notes'], b: ['weather', 'music', 'health'], smart: true };
+    try { var c = JSON.parse(localStorage.getItem('p18.w')); if (c && c.a && c.b) return c; } catch (e) {}
+    return d;
+  }
+  function wsave(c) { try { localStorage.setItem('p18.w', JSON.stringify(c)); } catch (e) {} }
+  function esc(s) { return String(s).replace(/[<>&"]/g, ''); }
+  function wsmart(list) {            // put the most relevant widget first for this hour
+    var h = new Date().getHours(), pref = h < 11 ? ['weather', 'calendar', 'clock'] : h < 18 ? ['calendar', 'notes', 'clock'] : ['music', 'health', 'clock'];
+    var best = null; for (var i = 0; i < pref.length && !best; i++) if (list.indexOf(pref[i]) >= 0) best = pref[i];
+    return best ? [best].concat(list.filter(function (x) { return x !== best; })) : list;
+  }
+  function wbuild(kind) {
+    var w = document.createElement('div'); w.className = 'wg'; w.dataset.k = kind;
+    var d = new Date();
+    if (kind === 'clock') { w.innerHTML = '<small id="wgDate"></small><div class="big" id="wgTime"></div><div class="t">Local time</div>'; w.onclick = function () { if (A) { closeAll(); A.openApp('com.google.android.deskclock'); } }; }
+    else if (kind === 'weather') {
+      var place = null, cache = null;
+      try { place = JSON.parse(localStorage.getItem('wx.place')); cache = JSON.parse(localStorage.getItem('wx.cache')); } catch (e) {}
+      if (place && cache && cache.d && cache.d.current) {
+        var k = cache.d.current, dl = cache.d.daily;
+        w.innerHTML = '<small>' + esc(place.name) + '</small><div class="big">' + Math.round(k.temperature_2m) + '°</div><div class="t">H:' + Math.round(dl.temperature_2m_max[0]) + '°  L:' + Math.round(dl.temperature_2m_min[0]) + '°</div>';
+      } else w.innerHTML = '<small>Weather</small><div class="big">☀︎</div><div class="t">Tap to set your city</div>';
+      w.onclick = openWeather;
     }
-    w.addEventListener('click', function () { openWeather(); });
-    row.appendChild(c); row.appendChild(w);
+    else if (kind === 'calendar') {
+      w.innerHTML = '<small>' + d.toLocaleDateString([], { weekday: 'long' }) + '</small><div class="big">' + d.getDate() + '</div><div class="t">' + d.toLocaleDateString([], { month: 'long', year: 'numeric' }) + '</div>';
+      w.onclick = function () { openBuiltin('cal'); };
+    }
+    else if (kind === 'music') {
+      w.innerHTML = '<small>Fmusic</small><div class="big">♫</div><div class="t">Discover and post songs</div>'; w.onclick = openMusic;
+    }
+    else if (kind === 'health') {
+      var lg = {}, key = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+      try { lg = (JSON.parse(localStorage.getItem('bi.health')) || {})[key] || {}; } catch (e) {}
+      var wt = lg.water || 0, pct = Math.min(100, wt / 8 * 100);
+      w.innerHTML = '<small>Health</small><div class="big">' + wt + '<span style="font-size:16px;opacity:.7"> / 8</span></div><div class="t">glasses of water</div><div class="bar"><b style="width:' + pct + '%"></b></div>';
+      w.onclick = function () { openBuiltin('health'); };
+    }
+    else if (kind === 'notes') {
+      var ns = []; try { ns = JSON.parse(localStorage.getItem('bi.notes')) || []; } catch (e) {}
+      var n = ns[0];
+      w.innerHTML = '<small>Notes</small><div class="t" style="font-size:16px;font-weight:600;margin-top:8px;opacity:1">' + esc(n ? n.t.split('\n')[0] : 'No notes yet') + '</div><div class="sub2">' + esc(n ? n.t.split('\n').slice(1).join('\n') : 'Tap to write one') + '</div>';
+      w.onclick = function () { openBuiltin('notes'); };
+    }
+    return w;
+  }
+  function wstack(ids, smart) {
+    var st = document.createElement('div'); st.className = 'stk';
+    var trk = document.createElement('div'); trk.className = 'trk'; st.appendChild(trk);
+    var list = smart ? wsmart(ids) : ids;
+    list.forEach(function (k) { trk.appendChild(wbuild(k)); });
+    if (list.length > 1) {
+      var sd = document.createElement('div'); sd.className = 'sd'; list.forEach(function () { sd.appendChild(document.createElement('i')); }); st.appendChild(sd);
+      var upd = function () { var i = Math.round(trk.scrollLeft / Math.max(trk.clientWidth, 1)); [].forEach.call(sd.children, function (x, j) { x.classList.toggle('on', j === i); }); };
+      trk.addEventListener('scroll', upd, { passive: true }); setTimeout(upd, 0);
+    }
+    var lp = null;
+    st.addEventListener('touchstart', function () { lp = setTimeout(function () { lp = null; wpicker(); if (navigator.vibrate) navigator.vibrate(12); }, 550); }, { passive: true });
+    ['touchmove', 'touchend', 'touchcancel'].forEach(function (ev) { st.addEventListener(ev, function () { if (lp) { clearTimeout(lp); lp = null; } }, { passive: true }); });
+    st.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    return st;
+  }
+  function widgets() {
+    var c = wcfg(), row = document.createElement('div'); row.className = 'wrow';
+    row.appendChild(wstack(c.a, c.smart)); row.appendChild(wstack(c.b, c.smart));
     setTimeout(tick, 0);
     return row;
   }
+  function wpicker() {
+    var c = wcfg(), pn = $('wpn');
+    function draw() {
+      var h = '<h3>Edit widgets</h3><p>Pick what each stack shows. Swipe a stack on the home screen to flip through it.</p>';
+      ['a', 'b'].forEach(function (s) {
+        h += '<div style="font-size:13px;opacity:.7;margin:6px 0">' + (s === 'a' ? 'Left stack' : 'Right stack') + '</div><div class="ch">';
+        Object.keys(WKINDS).forEach(function (k) { h += '<span data-s="' + s + '" data-k="' + k + '" class="' + (c[s].indexOf(k) >= 0 ? 'on' : '') + '">' + WKINDS[k] + '</span>'; });
+        h += '</div>';
+      });
+      h += '<div class="row"><span>Smart stack (best widget for the time of day)</span><div class="tg ' + (c.smart ? 'on' : '') + '" id="wsm"></div></div><div class="btn" id="wdone">Done</div>';
+      pn.innerHTML = h;
+      [].forEach.call(pn.querySelectorAll('.ch span'), function (el) {
+        el.onclick = function () {
+          var s = el.dataset.s, k = el.dataset.k, i = c[s].indexOf(k);
+          if (i >= 0) { if (c[s].length > 1) c[s].splice(i, 1); } else c[s].push(k);
+          draw();
+        };
+      });
+      $('wsm').onclick = function () { c.smart = !c.smart; draw(); };
+      $('wdone').onclick = function () { wsave(c); $('wpick').classList.remove('in'); render(); };
+    }
+    draw(); $('wpick').classList.add('in');
+  }
+  $('wpick').addEventListener('click', function (e) { if (e.target === this) { this.classList.remove('in'); } });
 
   function updateDots() {
     var pages = $('pages');
@@ -1879,10 +1987,49 @@ input.txt { flex: 1; min-width: 0; border: 0; outline: 0; background: transparen
     }
     if (isOpen(cc)) { var wr = ccBuilt ? ccQ('#wrap') : null; if (dy < -60 && !ccNoClose && !(wr && wr.scrollHeight > wr.clientHeight + 4)) hide(cc); return; }   // a scrollable sheet scrolls instead of closing
     if (anyOpen()) return;
+    if (sy > window.innerHeight - 28) return;   // home-bar zone has its own gestures
     if (dy < -70 && Math.abs(dx) < Math.abs(dy) * 0.6) {  // swipe up: dock = Recents, elsewhere = App Library
       if (fromDock) openRecents(); else openLib();
     }
   });
+
+  /* ---------- Home-bar gestures: up = Home, up + hold = Recents, side swipe = flip pages, long press edge-left = back ---------- */
+  (function () {
+    var z = $('hzone'), bar = $('hbar'), x0 = 0, y0 = 0, t0 = 0, on = false;
+    z.addEventListener('touchstart', function (e) { var t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); on = true; bar.style.transition = 'none'; }, { passive: true });
+    z.addEventListener('touchmove', function (e) {
+      if (!on) return; var t = e.touches[0], dy = Math.min(0, t.clientY - y0), dx = t.clientX - x0;
+      bar.style.transform = 'translate(' + (dx * 0.4) + 'px,' + (dy * 0.5) + 'px) scaleX(' + (1 + Math.min(.4, -dy / 300)) + ')';
+    }, { passive: true });
+    function end(e) {
+      if (!on) return; on = false; bar.style.transition = ''; bar.style.transform = '';
+      var t = (e.changedTouches || [])[0]; if (!t || locked) return;
+      var dx = t.clientX - x0, dy = t.clientY - y0, dt = Date.now() - t0;
+      if (dy < -50 && Math.abs(dy) > Math.abs(dx)) {
+        if (dt > 420 || dy < -260) openRecents();        // slow or long swipe = app switcher
+        else { if (anyOpen()) closeAll(); $('pages').scrollTo({ left: 0, behavior: 'smooth' }); }   // quick flick = Home
+      } else if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {   // slide along the bar = previous/next page
+        var pg = $('pages'); if (!anyOpen()) pg.scrollBy({ left: dx < 0 ? pg.clientWidth : -pg.clientWidth, behavior: 'smooth' });
+      }
+    }
+    z.addEventListener('touchend', end); z.addEventListener('touchcancel', function () { on = false; bar.style.transform = ''; });
+    // edge swipe from the left = Back
+    var ex = null;
+    document.addEventListener('touchstart', function (e) { var t = e.touches[0]; ex = t.clientX < 16 ? { x: t.clientX, y: t.clientY } : null; }, { passive: true });
+    document.addEventListener('touchend', function (e) {
+      if (!ex || locked) return; var t = e.changedTouches[0];
+      if (t.clientX - ex.x > 70 && Math.abs(t.clientY - ex.y) < 60 && anyOpen()) { if (!window.onBack()) closeAll(); }
+      ex = null;
+    });
+    // swipe down in the middle of the home screen = Search (App Library search)
+    var py = null;
+    $('pages').addEventListener('touchstart', function (e) { var t = e.touches[0]; py = { x: t.clientX, y: t.clientY, s: $('pages').scrollTop }; }, { passive: true });
+    $('pages').addEventListener('touchend', function (e) {
+      if (!py || locked || anyOpen()) return; var t = e.changedTouches[0];
+      if (t.clientY - py.y > 90 && Math.abs(t.clientX - py.x) < 60 && py.y > 80) openLib();
+      py = null;
+    });
+  })();
 
   window.onBack = function () {
     if (locked) return true;
