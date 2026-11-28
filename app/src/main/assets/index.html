@@ -37,6 +37,9 @@
   .app:active .ico { transform: scale(.88); opacity: .85; transition-duration: .1s; }
   .lbl { font-size: 10.5px; max-width: 100%; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
   body.nolabels .lbl { display: none; }
+  .ico.raw { background: transparent !important; box-shadow: 0 6px 14px rgba(0,0,0,.26) !important; border-radius: 22.4% !important; overflow: hidden; }
+  .ico.raw::before, .ico.raw::after { display: none; }
+  .ico.raw img { object-fit: cover; }
 
   /* smoothness: each page/icon is its own paint island, off-screen pages cost nothing, wallpaper pauses while a sheet is open */
   .page { contain: layout paint style; }
@@ -319,7 +322,9 @@
   ];
   /* Video wallpapers (bundled clips, looped and muted) */
   var VIDS = [['vorig', 'Hellcat Night', 'orig'], ['vneon', 'Hellcat Neon', 'neon'], ['vnoir', 'Hellcat Noir', 'noir'], ['vember', 'Hellcat Ember', 'ember'], ['vice', 'Hellcat Ice', 'ice'], ['vdream', 'Hellcat Dream', 'dream']];
+  var IMGS = [['icoral', 'Coral Glass', 'wall_coral'], ['icrystal', 'Crystal Blue', 'wall_crystal']];
   var WALLS = {};
+  IMGS.forEach(function (v) { WALLS[v[0]] = { name: v[1], base: '#000', blobs: [], css: 'url("' + v[2] + '.jpg") center/cover', live: false }; });
   VIDS.forEach(function (v) { WALLS[v[0]] = { name: v[1] + ' \u25b6 Video', base: '#000', blobs: [], css: 'url("wall_' + v[2] + '.jpg") center/cover', live: false, video: 'wall_' + v[2] + '.mp4' }; });
   DEFS.forEach(function (d) { WALLS[d[0]] = { name: d[1] + (d[4] ? ' ● Live' : ''), base: d[2], blobs: d[3], css: mesh(d[2], d[3]), live: !!d[4] }; });
   var SCRIM = 'linear-gradient(rgba(0,0,0,.14), rgba(0,0,0,.30))';
@@ -392,7 +397,18 @@
       .map(function (n) { return { name: n, pkg: 'demo.' + n.toLowerCase() }; });
   }
 
+  /* Your own icon artwork (PNG files next to this page) for Weather, Fmusic, Calculator and the browser */
+  var ICONFILE = { '__weather__': 'icon_weather.png', '__music__': 'icon_music.png' };
+  function iconFile(app) {
+    if (ICONFILE[app.pkg]) return ICONFILE[app.pkg];
+    var p = (app.pkg || '').toLowerCase();
+    if (/calculator|\.calc(ulator)?$|calc/.test(p)) return 'icon_calc.png';
+    if (/chrome|browser|safari|firefox|opera|\.edge|brave|duckduckgo/.test(p)) return 'icon_browser.png';
+    return '';
+  }
   function iconInto(ico, app) {
+    var ifile = iconFile(app);
+    if (ifile) { var im = new Image(); im.src = ifile; im.alt = ''; ico.classList.add('raw'); ico.textContent = ''; ico.appendChild(im); return; }
     var v = VIRT[app.pkg];
     if (v) { ico.innerHTML = v.svg; return; }
     ico.textContent = app.name.charAt(0).toUpperCase(); ico.style.background = gradFor(app.name);
